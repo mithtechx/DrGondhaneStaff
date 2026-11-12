@@ -38,7 +38,12 @@ import {
   ClipboardList,
   AlertTriangle,
   Boxes,
-  EyeOff
+  EyeOff,
+  ArrowRight,
+  ArrowLeft,
+  Trash2,
+  Filter,
+  Plus
 } from 'lucide-react';
 
 
@@ -117,6 +122,51 @@ const isMedicineExpired = medicine =>
 const inputClass =
   'w-full min-w-0 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition';
 
+const escapeHtml = value =>
+  String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]);
+
+function getBillItems(bill) {
+  if (Array.isArray(bill?.items) && bill.items.length > 0) {
+    return bill.items.map(item => ({
+      name:
+        item.name ||
+        item.medicine_name ||
+        item.medicines?.name ||
+        'Medicine',
+      qty: Number(item.qty ?? item.quantity ?? 0),
+      price: Number(
+        item.selling_price ??
+        item.price ??
+        0
+      )
+    }));
+  }
+
+  if (Array.isArray(bill?.bill_items)) {
+    return bill.bill_items.map(item => ({
+      name:
+        item.name ||
+        item.medicine_name ||
+        item.medicines?.name ||
+        'Medicine',
+      qty: Number(item.qty ?? item.quantity ?? 0),
+      price: Number(
+        item.selling_price ??
+        item.price ??
+        0
+      )
+    }));
+  }
+
+  return [];
+}
+
 
 // ======================================================
 // REUSABLE COMPONENTS
@@ -180,14 +230,16 @@ function Message({ error, success, onClose }) {
         {error || success}
       </p>
 
-      <button
-        type="button"
-        onClick={onClose}
-        className="shrink-0"
-        aria-label="Close message"
-      >
-        <X size={16} />
-      </button>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0"
+          aria-label="Close message"
+        >
+          <X size={16} />
+        </button>
+      )}
 
     </div>
   );
@@ -265,6 +317,8 @@ export default function App() {
   });
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [billingStep, setBillingStep] = useState(1);
 
   const [discountType, setDiscountType] = useState('none');
   const [discountValue, setDiscountValue] = useState('');
@@ -342,52 +396,38 @@ export default function App() {
   // ==================================================
 
   useEffect(() => {
-
     let mounted = true;
 
     const {
       data: { subscription }
-    } = supabase.auth.onAuthStateChange(
-      (_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!mounted) return;
 
-        if (!mounted) return;
-
-        setSession(newSession);
-        setUser(null);
-        setProfileLoading(Boolean(newSession));
-        setLoginError('');
-
-      }
-    );
-
+      setSession(newSession);
+      setUser(null);
+      setProfileLoading(Boolean(newSession));
+      setLoginError('');
+    });
 
     async function initialize() {
-
       try {
-
         const { data, error } = await supabase.auth.getSession();
 
         if (!mounted) return;
-
         if (error) throw error;
 
         const currentSession = data?.session ?? null;
 
         setSession(currentSession);
         setProfileLoading(Boolean(currentSession));
-
       } catch (error) {
-
         if (mounted) {
           setLoginError(
             error.message || 'Authentication initialization failed.'
           );
         }
-
       } finally {
-
         if (mounted) setAuthLoading(false);
-
       }
     }
 
@@ -397,7 +437,6 @@ export default function App() {
       mounted = false;
       subscription.unsubscribe();
     };
-
   }, []);
 
 
@@ -406,11 +445,9 @@ export default function App() {
   // ==================================================
 
   useEffect(() => {
-
     let active = true;
 
     async function loadStaffProfile() {
-
       if (!session?.user?.id) {
         setUser(null);
         setProfileLoading(false);
@@ -421,7 +458,6 @@ export default function App() {
       setProfileLoading(true);
 
       try {
-
         const { data, error } = await supabase
           .from('clinic_users')
           .select('id, username, role, auth_user_id')
@@ -429,7 +465,6 @@ export default function App() {
           .maybeSingle();
 
         if (!active) return;
-
         if (error) throw error;
 
         if (!data) {
@@ -439,9 +474,7 @@ export default function App() {
           return;
         }
 
-        if (
-          String(data.role || '').toLowerCase() !== 'staff'
-        ) {
+        if (String(data.role || '').toLowerCase() !== 'staff') {
           setLoginError(
             'This application is for staff accounts only. Please use the staff account.'
           );
@@ -450,19 +483,14 @@ export default function App() {
 
         setUser(data);
         setLoginError('');
-
       } catch (error) {
-
         if (active) {
           setLoginError(
             error.message || 'Unable to verify staff account.'
           );
         }
-
       } finally {
-
         if (active) setProfileLoading(false);
-
       }
     }
 
@@ -471,7 +499,6 @@ export default function App() {
     return () => {
       active = false;
     };
-
   }, [session?.user?.id]);
 
 
@@ -479,16 +506,14 @@ export default function App() {
   // LOGIN
   // ==================================================
 
-  async function handleLogin(e) {
-
-    e.preventDefault();
+  async function handleLogin(event) {
+    event.preventDefault();
 
     setLoginError('');
     setForgotMessage('');
     setLoginLoading(true);
 
     try {
-
       const { error } = await supabase.auth.signInWithPassword({
         email: loginEmail.trim().toLowerCase(),
         password: loginPass
@@ -497,17 +522,10 @@ export default function App() {
       if (error) throw error;
 
       setLoginPass('');
-
     } catch (error) {
-
-      setLoginError(
-        error.message || 'Login failed.'
-      );
-
+      setLoginError(error.message || 'Login failed.');
     } finally {
-
       setLoginLoading(false);
-
     }
   }
 
@@ -517,8 +535,9 @@ export default function App() {
   // ==================================================
 
   async function handleLogout() {
-
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    const { error } = await supabase.auth.signOut({
+      scope: 'local'
+    });
 
     if (error) {
       setLoginError(error.message);
@@ -530,7 +549,7 @@ export default function App() {
     setSession(null);
     setCart([]);
     setActiveTab('billing');
-
+    setBillingStep(1);
   }
 
 
@@ -539,7 +558,6 @@ export default function App() {
   // ==================================================
 
   async function handleForgotPassword() {
-
     const email = loginEmail.trim().toLowerCase();
 
     if (!email) {
@@ -554,7 +572,6 @@ export default function App() {
     setLoginError('');
 
     try {
-
       const { error } = await supabase.auth.resetPasswordForEmail(
         email,
         {
@@ -567,17 +584,12 @@ export default function App() {
       setForgotMessage(
         'Password reset instructions have been requested. Check your registered email.'
       );
-
     } catch (error) {
-
       setForgotMessage(
         error.message || 'Unable to request password reset.'
       );
-
     } finally {
-
       setLoginLoading(false);
-
     }
   }
 
@@ -586,9 +598,8 @@ export default function App() {
   // CHANGE OWN PASSWORD
   // ==================================================
 
-  async function handleChangePassword(e) {
-
-    e.preventDefault();
+  async function handleChangePassword(event) {
+    event.preventDefault();
 
     setPasswordMessage('');
 
@@ -607,30 +618,21 @@ export default function App() {
     setPasswordLoading(true);
 
     try {
-
       const { error } = await supabase.auth.updateUser({
         password: newPassword
       });
 
       if (error) throw error;
 
-      setPasswordMessage(
-        'Password updated successfully.'
-      );
-
+      setPasswordMessage('Password updated successfully.');
       setNewPassword('');
       setConfirmPassword('');
-
     } catch (error) {
-
       setPasswordMessage(
         error.message || 'Unable to update password.'
       );
-
     } finally {
-
       setPasswordLoading(false);
-
     }
   }
 
@@ -640,21 +642,18 @@ export default function App() {
   // ==================================================
 
   const fetchAllData = useCallback(async () => {
-
     if (!user) return;
 
     setDataLoading(true);
     setDataError('');
 
     try {
-
       const [
         medicineResult,
         billResult,
         creditResult,
         returnResult
       ] = await Promise.all([
-
         supabase
           .from('medicines')
           .select('*')
@@ -677,39 +676,30 @@ export default function App() {
           .select('*')
           .order('created_at', { ascending: false })
           .limit(100)
-
       ]);
 
       const errors = [];
 
       if (medicineResult.error) {
-        errors.push(
-          'Medicines: ' + medicineResult.error.message
-        );
+        errors.push('Medicines: ' + medicineResult.error.message);
       } else {
         setMedicines(medicineResult.data || []);
       }
 
       if (billResult.error) {
-        errors.push(
-          'Bills: ' + billResult.error.message
-        );
+        errors.push('Bills: ' + billResult.error.message);
       } else {
         setBills(billResult.data || []);
       }
 
       if (creditResult.error) {
-        errors.push(
-          'Credits: ' + creditResult.error.message
-        );
+        errors.push('Credits: ' + creditResult.error.message);
       } else {
         setCredits(creditResult.data || []);
       }
 
       if (returnResult.error) {
-        errors.push(
-          'Returns: ' + returnResult.error.message
-        );
+        errors.push('Returns: ' + returnResult.error.message);
       } else {
         setReturns(returnResult.data || []);
       }
@@ -717,28 +707,17 @@ export default function App() {
       if (errors.length > 0) {
         setDataError(errors.join(' | '));
       }
-
     } catch (error) {
-
       setDataError(
         error.message || 'Unable to load application data.'
       );
-
     } finally {
-
       setDataLoading(false);
-
     }
-
   }, [user]);
 
-
   useEffect(() => {
-
-    if (user) {
-      fetchAllData();
-    }
-
+    if (user) fetchAllData();
   }, [user, fetchAllData]);
 
 
@@ -747,123 +726,150 @@ export default function App() {
   // ==================================================
 
   useEffect(() => {
-
     let active = true;
 
-    const phone = patient.phone.replace(/\D/g, '');
+    const phone = patient.phone.trim();
+    const digits = phone.replace(/\D/g, '');
 
-    if (phone.length < 10) {
-
+    if (digits.length < 10) {
       setExistingCredit(0);
       setPayOldBalance(false);
       setPartialOldPay('');
-
       return;
     }
 
+    setExistingCredit(0);
+    setPayOldBalance(false);
+    setPartialOldPay('');
+
     const timer = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('credits')
+          .select('credit_amount')
+          .eq('patient_phone', phone)
+          .eq('status', 'Pending');
 
-      const { data, error } = await supabase
-        .from('credits')
-        .select('credit_amount')
-        .eq('patient_phone', patient.phone.trim())
-        .eq('status', 'Pending');
+        if (!active) return;
+        if (error) throw error;
 
-      if (!active) return;
-
-      if (error) {
-        setDataError(
-          'Unable to check previous balance: ' + error.message
+        const total = (data || []).reduce(
+          (sum, record) =>
+            sum + Number(record.credit_amount || 0),
+          0
         );
-        return;
+
+        setExistingCredit(total);
+        setPartialOldPay(total > 0 ? String(total) : '');
+      } catch (error) {
+        if (active) {
+          setCheckoutError(
+            'Unable to check previous balance: ' + error.message
+          );
+        }
       }
-
-      const total = (data || []).reduce(
-        (sum, item) =>
-          sum + Number(item.credit_amount || 0),
-        0
-      );
-
-      setExistingCredit(total);
-      setPartialOldPay(total > 0 ? String(total) : '');
-      setPayOldBalance(false);
-
     }, 400);
 
     return () => {
       active = false;
       clearTimeout(timer);
     };
-
   }, [patient.phone]);
 
 
   // ==================================================
-  // BILL CALCULATIONS
+  // BILLING CALCULATIONS
   // ==================================================
 
-  const subtotal = useMemo(() => {
-
-    return cart.reduce(
-      (sum, item) =>
-        sum + Number(item.selling_price || 0) * item.qty,
-      0
+  const categories = useMemo(() => {
+    const uniqueCategories = medicines.map(medicine =>
+      (medicine.category || 'General').trim() || 'General'
     );
 
+    return [
+      'All',
+      ...Array.from(new Set(uniqueCategories)).sort(
+        (a, b) => a.localeCompare(b)
+      )
+    ];
+  }, [medicines]);
+
+  const filteredMedicines = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return medicines.filter(medicine => {
+      const category =
+        (medicine.category || 'General').trim() || 'General';
+
+      const matchesCategory =
+        selectedCategory === 'All' ||
+        category.toLowerCase() === selectedCategory.toLowerCase();
+
+      const matchesSearch =
+        !query ||
+        [
+          medicine.name,
+          medicine.category,
+          medicine.batch_no
+        ].some(value =>
+          String(value || '').toLowerCase().includes(query)
+        );
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [medicines, searchQuery, selectedCategory]);
+
+  const subtotal = useMemo(() => {
+    return cart.reduce(
+      (sum, item) =>
+        sum +
+        Number(item.selling_price || item.price || 0) * item.qty,
+      0
+    );
   }, [cart]);
 
-
   const discountAmount = useMemo(() => {
-
-    const value = Number(discountValue || 0);
+    const value = Math.max(0, Number(discountValue || 0));
 
     if (discountType === 'percent') {
       return Math.min(
         subtotal,
-        subtotal * Math.min(100, Math.max(0, value)) / 100
+        subtotal * Math.min(100, value) / 100
       );
     }
 
     if (discountType === 'flat') {
-      return Math.min(
-        subtotal,
-        Math.max(0, value)
-      );
+      return Math.min(subtotal, value);
     }
 
     return 0;
-
   }, [subtotal, discountType, discountValue]);
 
-
-  const grandTotal = Math.max(
-    0,
-    subtotal - discountAmount
-  );
-
+  const grandTotal = Math.max(0, subtotal - discountAmount);
 
   const oldBalanceToAdd = payOldBalance
     ? Number(partialOldPay || 0)
     : 0;
 
-
-  const currentBillPaid = cart.length === 0
-    ? 0
-    : paymentMode === 'credit'
+  const currentBillPaid =
+    paymentMode === 'credit'
       ? 0
       : paymentMode === 'split'
         ? Number(cashPaid || 0)
         : grandTotal;
-
 
   const newCreditAmount = Math.max(
     0,
     grandTotal - currentBillPaid
   );
 
-
   const totalCollection =
     currentBillPaid + oldBalanceToAdd;
+
+  const totalCartQty = cart.reduce(
+    (sum, item) => sum + item.qty,
+    0
+  );
 
 
   // ==================================================
@@ -871,7 +877,6 @@ export default function App() {
   // ==================================================
 
   function addToCart(medicine) {
-
     setCheckoutError('');
     setCheckoutSuccess('');
     setWhatsappUrl('');
@@ -891,20 +896,15 @@ export default function App() {
     }
 
     setCart(previous => {
-
       const existing = previous.find(
         item => item.id === medicine.id
       );
 
       if (existing) {
-
-        if (
-          existing.qty + 1 > Number(medicine.stock)
-        ) {
+        if (existing.qty >= Number(medicine.stock)) {
           setCheckoutError(
             `Only ${medicine.stock} unit(s) of ${medicine.name} are available.`
           );
-
           return previous;
         }
 
@@ -915,50 +915,39 @@ export default function App() {
         );
       }
 
-      return [
-        ...previous,
-        {
-          ...medicine,
-          qty: 1
-        }
-      ];
-
+      return [...previous, { ...medicine, qty: 1 }];
     });
   }
 
-
   function updateQty(id, value) {
-
     const quantity = Number(value);
 
     if (!Number.isInteger(quantity) || quantity <= 0) {
-
       setCart(previous =>
         previous.filter(item => item.id !== id)
       );
-
       return;
     }
 
     setCart(previous =>
       previous.map(item => {
-
         if (item.id !== id) return item;
 
         if (quantity > Number(item.stock || 0)) {
           setCheckoutError(
             `Available stock for ${item.name} is ${item.stock} units.`
           );
-
           return item;
         }
 
-        return {
-          ...item,
-          qty: quantity
-        };
-
+        return { ...item, qty: quantity };
       })
+    );
+  }
+
+  function removeFromCart(id) {
+    setCart(previous =>
+      previous.filter(item => item.id !== id)
     );
   }
 
@@ -968,7 +957,6 @@ export default function App() {
   // ==================================================
 
   async function processOldCreditPayment(amount, phone) {
-
     if (amount <= 0) return;
 
     const { data, error } = await supabase
@@ -983,7 +971,6 @@ export default function App() {
     let remaining = amount;
 
     for (const record of data || []) {
-
       if (remaining <= 0.001) break;
 
       const due = Number(record.credit_amount || 0);
@@ -1015,11 +1002,10 @@ export default function App() {
 
 
   // ==================================================
-  // WHATSAPP RECEIPT URL
+  // WHATSAPP RECEIPT
   // ==================================================
 
   function createWhatsAppUrl() {
-
     const phone = patient.phone.replace(/\D/g, '');
 
     if (!phone) return '';
@@ -1028,37 +1014,41 @@ export default function App() {
       phone.startsWith('91') ? phone : `91${phone}`;
 
     let message =
-      `*Dr. Gondhane Clinic*\n` +
-      `Patient: ${patient.name || 'Patient'}\n` +
-      `Date: ${new Date().toLocaleString('en-IN')}\n\n`;
+      `Hello *${patient.name || 'Patient'}*,\n` +
+      `Thank you for visiting *Dr. Gondhane Skin Care Clinic*.\n\n` +
+      `*Billed Items:*\n`;
 
     if (cart.length > 0) {
+      message += cart.map(item => {
+        const price = Number(
+          item.selling_price || item.price || 0
+        );
 
-      message += '*Medicines:*\n';
+        return `• ${item.name} (x${item.qty}) - ${money(price * item.qty)}`;
+      }).join('\n');
+    } else {
+      message += 'Old balance payment only';
+    }
 
-      cart.forEach(item => {
+    message += `\n\nSubtotal: ${money(subtotal)}\n`;
 
-        message +=
-          `- ${item.name} (${item.qty} x ${money(item.selling_price)}) = ${money(item.qty * item.selling_price)}\n`;
+    if (discountAmount > 0) {
+      message += `Discount: -${money(discountAmount)}\n`;
+    }
 
-      });
+    message += `*Current Bill Total: ${money(grandTotal)}*\n`;
+    message += `Payment Mode: *${paymentMode.toUpperCase()}*\n`;
+    message += `Paid on Current Bill: ${money(currentBillPaid)}\n`;
 
-      message += `\nSubtotal: ${money(subtotal)}\n`;
-
-      if (discountAmount > 0) {
-        message += `Discount: -${money(discountAmount)}\n`;
-      }
-
-      message += `*Current Bill Total: ${money(grandTotal)}*\n`;
-      message += `Paid: ${money(currentBillPaid)}\n`;
+    if (newCreditAmount > 0) {
       message += `New Due: ${money(newCreditAmount)}\n`;
     }
 
     if (oldBalanceToAdd > 0) {
-      message += `\nOld Balance Paid: ${money(oldBalanceToAdd)}\n`;
+      message += `Old Balance Paid: ${money(oldBalanceToAdd)}\n`;
     }
 
-    message += '\nThank you. Get well soon!';
+    message += '\nSoftware by MithTechX.';
 
     return `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
   }
@@ -1069,12 +1059,16 @@ export default function App() {
   // ==================================================
 
   async function handleCheckout(openWhatsApp = false) {
-
     if (checkoutLoading || partialCheckout) return;
 
     setCheckoutError('');
     setCheckoutSuccess('');
     setWhatsappUrl('');
+
+    if (!patient.name.trim()) {
+      setCheckoutError('Please enter patient name.');
+      return;
+    }
 
     if (
       cart.length === 0 &&
@@ -1086,11 +1080,9 @@ export default function App() {
       return;
     }
 
-    if (
-      cart.length > 0 &&
-      patient.phone.trim() &&
-      patient.phone.replace(/\D/g, '').length < 10
-    ) {
+    const phoneDigits = patient.phone.replace(/\D/g, '');
+
+    if (patient.phone.trim() && phoneDigits.length < 10) {
       setCheckoutError(
         'Enter a valid patient phone number or leave it empty.'
       );
@@ -1100,22 +1092,20 @@ export default function App() {
     if (
       payOldBalance &&
       (
+        !Number.isFinite(oldBalanceToAdd) ||
         oldBalanceToAdd <= 0 ||
-        oldBalanceToAdd > existingCredit
+        oldBalanceToAdd > existingCredit + 0.001
       )
     ) {
       setCheckoutError(
-        'Enter a valid old balance payment amount.'
+        'Enter a valid old balance payment amount not exceeding the pending due.'
       );
       return;
     }
 
-    if (
-      payOldBalance &&
-      patient.phone.replace(/\D/g, '').length < 10
-    ) {
+    if (payOldBalance && phoneDigits.length < 10) {
       setCheckoutError(
-        'A valid patient phone number is required to pay an old balance.'
+        'A valid phone number is required to pay an old balance.'
       );
       return;
     }
@@ -1137,7 +1127,7 @@ export default function App() {
 
     if (
       newCreditAmount > 0 &&
-      patient.phone.replace(/\D/g, '').length < 10
+      phoneDigits.length < 10
     ) {
       setCheckoutError(
         'A valid phone number is required for a credit transaction.'
@@ -1148,21 +1138,16 @@ export default function App() {
     setCheckoutLoading(true);
 
     let savedBillId = null;
+    let hasMutatedDatabase = false;
 
     try {
-
-      // Recheck current medicine stock.
-
+      // Recheck stock and expiry directly in Supabase.
       let currentMedicines = [];
 
       if (cart.length > 0) {
-
         const medicineIds = cart.map(item => item.id);
 
-        const {
-          data,
-          error
-        } = await supabase
+        const { data, error } = await supabase
           .from('medicines')
           .select('id, name, stock, expiry_date')
           .in('id', medicineIds);
@@ -1172,7 +1157,6 @@ export default function App() {
         currentMedicines = data || [];
 
         for (const item of cart) {
-
           const current = currentMedicines.find(
             medicine => medicine.id === item.id
           );
@@ -1184,14 +1168,10 @@ export default function App() {
           }
 
           if (isMedicineExpired(current)) {
-            throw new Error(
-              `${item.name} has expired.`
-            );
+            throw new Error(`${item.name} has expired.`);
           }
 
-          if (
-            Number(current.stock || 0) < item.qty
-          ) {
+          if (Number(current.stock || 0) < item.qty) {
             throw new Error(
               `Insufficient stock for ${item.name}. Available: ${current.stock}.`
             );
@@ -1199,44 +1179,61 @@ export default function App() {
         }
       }
 
-
-      // CREATE BILL
-
+      // Store item snapshot for Admin receipt compatibility.
       if (cart.length > 0) {
+        const itemSnapshot = cart.map(item => {
+          const price = Number(
+            item.selling_price || item.price || 0
+          );
 
-        const { data: billData, error: billError } =
-          await supabase
-            .from('bills')
-            .insert([{
-              patient_name: patient.name || 'Walk-in Patient',
-              patient_phone: patient.phone || '0000000000',
-              locality: patient.locality || 'Clinic',
-              total_amount: grandTotal
-            }])
-            .select()
-            .single();
+          return {
+            id: item.id,
+            medicine_id: item.id,
+            name: item.name,
+            category: item.category || 'General',
+            batch_no: item.batch_no || null,
+            qty: item.qty,
+            selling_price: price,
+            price
+          };
+        });
+
+        const { data: billData, error: billError } = await supabase
+          .from('bills')
+          .insert([{
+            patient_name: patient.name.trim(),
+            patient_phone: patient.phone.trim() || '0000000000',
+            locality: patient.locality.trim() || 'Clinic',
+            total_amount: grandTotal,
+            payment_mode: paymentMode,
+            items: itemSnapshot
+          }])
+          .select()
+          .single();
 
         if (billError) throw billError;
 
         savedBillId = billData.id;
+        hasMutatedDatabase = true;
 
+        // Maintain normalized bill items for Staff and Admin history.
+        const normalizedItems = cart.map(item => ({
+          bill_id: billData.id,
+          medicine_id: item.id,
+          quantity: item.qty,
+          price: Number(
+            item.selling_price || item.price || 0
+          )
+        }));
 
-        // SAVE BILL ITEMS AND REDUCE STOCK
+        const { error: itemError } = await supabase
+          .from('bill_items')
+          .insert(normalizedItems);
 
+        if (itemError) throw itemError;
+
+        // Reduce medicine stock with a guarded update.
         for (const item of cart) {
-
-          const { error: itemError } = await supabase
-            .from('bill_items')
-            .insert([{
-              bill_id: billData.id,
-              medicine_id: item.id,
-              quantity: item.qty,
-              price: Number(item.selling_price || 0)
-            }]);
-
-          if (itemError) throw itemError;
-
-
           const current = currentMedicines.find(
             medicine => medicine.id === item.id
           );
@@ -1245,7 +1242,7 @@ export default function App() {
             await supabase
               .from('medicines')
               .update({
-                stock: Number(current.stock) - item.qty
+                stock: Number(current.stock || 0) - item.qty
               })
               .eq('id', item.id)
               .gte('stock', item.qty)
@@ -1259,18 +1256,17 @@ export default function App() {
               `Stock update could not be confirmed for ${item.name}.`
             );
           }
+
+          hasMutatedDatabase = true;
         }
 
-
-        // RECORD NEW CREDIT
-
+        // Record new unpaid balance against this bill only.
         if (newCreditAmount > 0) {
-
           const { error: creditError } = await supabase
             .from('credits')
             .insert([{
-              patient_name: patient.name || 'Patient',
-              patient_phone: patient.phone,
+              patient_name: patient.name.trim(),
+              patient_phone: patient.phone.trim(),
               total_bill_amount: grandTotal,
               paid_amount: currentBillPaid,
               credit_amount: newCreditAmount,
@@ -1278,31 +1274,26 @@ export default function App() {
             }]);
 
           if (creditError) throw creditError;
-        }
 
+          hasMutatedDatabase = true;
+        }
       }
 
-
-      // PAY OLD CREDIT INDEPENDENTLY
-
+      // Old payments settle previous credit records separately.
       if (payOldBalance && oldBalanceToAdd > 0) {
-
         await processOldCreditPayment(
           oldBalanceToAdd,
           patient.phone
         );
 
+        hasMutatedDatabase = true;
       }
 
+      const finalWhatsAppUrl = openWhatsApp
+        ? createWhatsAppUrl()
+        : '';
 
-      // CREATE WHATSAPP LINK AFTER CHECKOUT
-
-      if (openWhatsApp) {
-        setWhatsappUrl(createWhatsAppUrl());
-      }
-
-
-      // RESET BILLING FORM
+      setWhatsappUrl(finalWhatsAppUrl);
 
       setCheckoutSuccess(
         savedBillId
@@ -1320,7 +1311,6 @@ export default function App() {
 
       setDiscountType('none');
       setDiscountValue('');
-
       setPaymentMode('cash');
       setCashPaid('');
 
@@ -1328,32 +1318,26 @@ export default function App() {
       setPayOldBalance(false);
       setPartialOldPay('');
 
+      setBillingStep(1);
+      setPartialCheckout(false);
+
       await fetchAllData();
-
     } catch (error) {
-
       console.error('Checkout error:', error);
 
-      if (savedBillId) {
-
+      if (savedBillId || hasMutatedDatabase) {
         setPartialCheckout(true);
 
         setCheckoutError(
-          `Bill ${String(savedBillId).slice(0, 8)} was created, but a later operation failed: ${error.message}. Do not submit it again. Ask the administrator to inspect the bill and inventory.`
+          `A database operation failed after some records may have been saved. ${savedBillId ? `Bill ${String(savedBillId).slice(0, 8)} was created. ` : ''}Error: ${error.message}. Do not submit again. Ask the administrator to inspect the bill, stock and credit records.`
         );
-
       } else {
-
         setCheckoutError(
           error.message || 'Unable to complete checkout.'
         );
-
       }
-
     } finally {
-
       setCheckoutLoading(false);
-
     }
   }
 
@@ -1363,7 +1347,6 @@ export default function App() {
   // ==================================================
 
   async function settleCredit(credit) {
-
     const confirmed = window.confirm(
       `Mark the remaining ${money(credit.credit_amount)} balance for ${credit.patient_name} as settled?`
     );
@@ -1373,7 +1356,6 @@ export default function App() {
     setCreditLoadingId(credit.id);
 
     try {
-
       const updatedPaid =
         Number(credit.paid_amount || 0) +
         Number(credit.credit_amount || 0);
@@ -1390,17 +1372,12 @@ export default function App() {
       if (error) throw error;
 
       await fetchAllData();
-
     } catch (error) {
-
       setDataError(
         'Unable to settle credit: ' + error.message
       );
-
     } finally {
-
       setCreditLoadingId(null);
-
     }
   }
 
@@ -1410,13 +1387,10 @@ export default function App() {
   // ==================================================
 
   const selectedReturnMedicine = useMemo(() => {
-
     return medicines.find(
       medicine => medicine.id === selectedReturnMedicineId
     ) || null;
-
   }, [medicines, selectedReturnMedicineId]);
-
 
   const validReturnQuantity =
     Number.isInteger(Number(returnQuantity)) &&
@@ -1438,10 +1412,8 @@ export default function App() {
     returnCondition === 'resellable' &&
     !returnExpired;
 
-
-  async function handleReturnSubmit(e) {
-
-    e.preventDefault();
+  async function handleReturnSubmit(event) {
+    event.preventDefault();
 
     setReturnError('');
     setReturnSuccess('');
@@ -1459,16 +1431,13 @@ export default function App() {
     }
 
     if (returnReason.trim().length < 3) {
-      setReturnError(
-        'Enter a valid return reason.'
-      );
+      setReturnError('Enter a valid return reason.');
       return;
     }
 
     setReturnLoading(true);
 
     try {
-
       const { data, error } = await supabase.rpc(
         'record_medicine_return',
         {
@@ -1501,17 +1470,12 @@ export default function App() {
       setReturnCondition('resellable');
 
       await fetchAllData();
-
     } catch (error) {
-
       setReturnError(
         error.message || 'Unable to record return.'
       );
-
     } finally {
-
       setReturnLoading(false);
-
     }
   }
 
@@ -1520,113 +1484,64 @@ export default function App() {
   // FILTERED DATA
   // ==================================================
 
-  const filteredMedicines = useMemo(() => {
-
-    const query = searchQuery.trim().toLowerCase();
-
-    return medicines.filter(medicine => {
-
-      return (
-        !query ||
-        [
-          medicine.name,
-          medicine.category,
-          medicine.batch_no
-        ].some(value =>
-          String(value || '').toLowerCase().includes(query)
-        )
-      );
-
-    });
-
-  }, [medicines, searchQuery]);
-
-
   const filteredStock = useMemo(() => {
-
     const query = stockSearch.trim().toLowerCase();
 
-    return medicines.filter(medicine => {
-
-      return (
-        !query ||
-        [
-          medicine.name,
-          medicine.category,
-          medicine.batch_no
-        ].some(value =>
-          String(value || '').toLowerCase().includes(query)
-        )
-      );
-
-    });
-
+    return medicines.filter(medicine =>
+      !query ||
+      [
+        medicine.name,
+        medicine.category,
+        medicine.batch_no
+      ].some(value =>
+        String(value || '').toLowerCase().includes(query)
+      )
+    );
   }, [medicines, stockSearch]);
 
-
   const filteredBills = useMemo(() => {
-
     const query = historySearch.trim().toLowerCase();
 
-    return bills.filter(bill => {
-
-      return (
-        !query ||
-        [
-          bill.patient_name,
-          bill.patient_phone,
-          bill.locality,
-          bill.id
-        ].some(value =>
-          String(value || '').toLowerCase().includes(query)
-        )
-      );
-
-    });
-
+    return bills.filter(bill =>
+      !query ||
+      [
+        bill.patient_name,
+        bill.patient_phone,
+        bill.locality,
+        bill.id
+      ].some(value =>
+        String(value || '').toLowerCase().includes(query)
+      )
+    );
   }, [bills, historySearch]);
 
-
   const filteredCredits = useMemo(() => {
-
     const query = creditSearch.trim().toLowerCase();
 
-    return credits.filter(credit => {
-
-      return (
-        !query ||
-        [
-          credit.patient_name,
-          credit.patient_phone
-        ].some(value =>
-          String(value || '').toLowerCase().includes(query)
-        )
-      );
-
-    });
-
+    return credits.filter(credit =>
+      !query ||
+      [
+        credit.patient_name,
+        credit.patient_phone
+      ].some(value =>
+        String(value || '').toLowerCase().includes(query)
+      )
+    );
   }, [credits, creditSearch]);
 
-
   const filteredReturns = useMemo(() => {
-
     const query = returnSearch.trim().toLowerCase();
 
-    return returns.filter(item => {
-
-      return (
-        !query ||
-        [
-          item.medicine_name,
-          item.batch_no,
-          item.reason
-        ].some(value =>
-          String(value || '').toLowerCase().includes(query)
-        )
-      );
-
-    });
-
+    return returns.filter(item =>
+      !query ||
+      [
+        item.medicine_name,
+        item.batch_no,
+        item.reason
+      ].some(value =>
+        String(value || '').toLowerCase().includes(query)
+      )
+    );
   }, [returns, returnSearch]);
 
 
@@ -1635,33 +1550,154 @@ export default function App() {
   // ==================================================
 
   const todayReturns = useMemo(() => {
-
-    return returns.filter(item =>
-      localDateKey(item.created_at) === todayKey()
+    return returns.filter(
+      item => localDateKey(item.created_at) === todayKey()
     );
-
   }, [returns]);
 
-
   const returnSummary = useMemo(() => {
-
     return todayReturns.reduce((result, item) => {
-
       result.count += 1;
       result.quantity += Number(item.quantity || 0);
       result.value += Number(item.total_amount || 0);
       result.stock += Number(item.stock_added || 0);
-
       return result;
-
     }, {
       count: 0,
       quantity: 0,
       value: 0,
       stock: 0
     });
-
   }, [todayReturns]);
+
+
+  // ==================================================
+  // RECEIPT PRINTING
+  // ==================================================
+
+  function printReceipt(bill) {
+    const items = getBillItems(bill);
+
+    const rows = items.map(item => `
+      <tr>
+        <td>${escapeHtml(item.name)}</td>
+        <td style="text-align:center">${item.qty}</td>
+        <td style="text-align:right">${money(item.price * item.qty)}</td>
+      </tr>
+    `).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Clinic Receipt</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              color: #111827;
+              max-width: 420px;
+              margin: 20px auto;
+              padding: 20px;
+            }
+            h2, h3 { text-align: center; margin: 6px 0; }
+            p { font-size: 12px; margin: 7px 0; }
+            .muted { color: #64748b; }
+            .line { border-top: 1px dashed #94a3b8; margin: 14px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { padding: 8px 3px; border-bottom: 1px solid #e2e8f0; }
+            th { text-align: left; }
+            .right { text-align: right; }
+            .total { display: flex; justify-content: space-between; font-weight: 800; font-size: 18px; margin-top: 15px; }
+            @media print { body { margin: 0 auto; } }
+          </style>
+        </head>
+        <body>
+          <h2>Dr. Gondhane Skin Care Clinic</h2>
+          <h3>Official Patient Receipt</h3>
+          <p class="muted" style="text-align:center">${escapeHtml(formatDateTime(bill.created_at))}</p>
+          <div class="line"></div>
+          <p><strong>Patient:</strong> ${escapeHtml(bill.patient_name)}</p>
+          <p><strong>Phone:</strong> ${escapeHtml(bill.patient_phone || 'N/A')}</p>
+          <p><strong>Locality:</strong> ${escapeHtml(bill.locality || 'Clinic')}</p>
+          <p><strong>Payment Mode:</strong> ${escapeHtml(bill.payment_mode || 'Cash')}</p>
+          <div class="line"></div>
+          <table>
+            <thead>
+              <tr><th>Item</th><th style="text-align:center">Qty</th><th class="right">Amount</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="total">
+            <span>Grand Total</span>
+            <span>${money(bill.total_amount)}</span>
+          </div>
+          <div class="line"></div>
+          <p style="text-align:center" class="muted">Thank you for visiting!<br>Software by MithTechX</p>
+          <script>window.onload = () => window.print();</script>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+
+    if (!printWindow) {
+      window.alert('Please allow pop-ups to print the receipt.');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }
+
+
+  // ==================================================
+  // RECEIPT WHATSAPP
+  // ==================================================
+
+  function sendBillWhatsApp(bill) {
+    const phone = String(bill.patient_phone || '').replace(/\D/g, '');
+
+    if (phone.length < 10) {
+      window.alert('This bill does not have a valid patient phone number.');
+      return;
+    }
+
+    const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
+    const items = getBillItems(bill);
+
+    const itemLines = items.map(item =>
+      `• ${item.name} (x${item.qty}) - ${money(item.price * item.qty)}`
+    ).join('\n');
+
+    const message =
+      `Hello *${bill.patient_name || 'Patient'}*,\n` +
+      `Thank you for visiting *Dr. Gondhane Skin Care Clinic*.\n\n` +
+      `*Billed Items:*\n${itemLines || 'Items not available'}\n\n` +
+      `Payment Mode: *${bill.payment_mode || 'Cash'}*\n` +
+      `Total Amount: *${money(bill.total_amount)}*\n\n` +
+      `Software by MithTechX.`;
+
+    window.open(
+      `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+  }
+
+
+  // ==================================================
+  // NAVIGATION TABS
+  // ==================================================
+
+  const tabs = [
+    { id: 'billing', label: 'Billing Counter', icon: ShoppingCart },
+    { id: 'history', label: 'Bill History', icon: ClipboardList },
+    { id: 'credits', label: 'Credit Ledger', icon: CreditCard },
+    { id: 'inventory', label: 'Stock Lookup', icon: Package },
+    { id: 'returns', label: 'Medicine Returns', icon: RotateCcw }
+  ];
 
 
   // ==================================================
@@ -1669,38 +1705,27 @@ export default function App() {
   // ==================================================
 
   if (authLoading || (session && profileLoading)) {
-
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-
         <div className="text-center text-white space-y-3">
-
           <Loader2
             size={35}
             className="animate-spin mx-auto text-emerald-400"
           />
-
           <p className="text-sm font-bold">
             Verifying staff account...
           </p>
-
         </div>
-
       </div>
     );
   }
 
-
   if (!session) {
-
     return (
-
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
-
         <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 space-y-6">
 
           <div className="text-center space-y-2">
-
             <div className="bg-emerald-700 text-white w-14 h-14 rounded-2xl mx-auto flex items-center justify-center shadow-md">
               <ShieldCheck size={28} />
             </div>
@@ -1712,9 +1737,7 @@ export default function App() {
             <p className="text-xs text-slate-500">
               Secure Staff Terminal · Powered by MithTechX
             </p>
-
           </div>
-
 
           <Message
             error={loginError}
@@ -1725,73 +1748,59 @@ export default function App() {
             }}
           />
 
-
           <form onSubmit={handleLogin} className="space-y-4">
 
             <div className="space-y-1.5">
-
               <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                 Staff Email
               </label>
 
               <div className="relative">
-
                 <User
                   size={16}
                   className="absolute left-4 top-3.5 text-slate-400"
                 />
-
                 <input
                   type="email"
                   required
                   placeholder="staff@gmail.com"
                   autoComplete="username"
                   value={loginEmail}
-                  onChange={e => setLoginEmail(e.target.value)}
+                  onChange={event => setLoginEmail(event.target.value)}
                   className={`${inputClass} pl-11`}
                   disabled={loginLoading}
                 />
-
               </div>
-
             </div>
 
-
             <div className="space-y-1.5">
-
               <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                 Password
               </label>
 
               <div className="relative">
-
                 <Lock
                   size={16}
                   className="absolute left-4 top-3.5 text-slate-400"
                 />
-
                 <input
                   type="password"
                   required
                   placeholder="Enter your password"
                   autoComplete="current-password"
                   value={loginPass}
-                  onChange={e => setLoginPass(e.target.value)}
+                  onChange={event => setLoginPass(event.target.value)}
                   className={`${inputClass} pl-11`}
                   disabled={loginLoading}
                 />
-
               </div>
-
             </div>
-
 
             <button
               type="submit"
               disabled={loginLoading}
               className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white rounded-2xl font-bold text-sm shadow-md transition flex items-center justify-center gap-2"
             >
-
               {loginLoading ? (
                 <>
                   <Loader2 size={17} className="animate-spin" />
@@ -1803,9 +1812,7 @@ export default function App() {
                   Login to Staff Terminal
                 </>
               )}
-
             </button>
-
 
             <button
               type="button"
@@ -1818,13 +1825,10 @@ export default function App() {
 
           </form>
 
-
           <div className="text-center pt-3 border-t border-slate-100 text-[11px] text-slate-400 font-semibold">
             Software by MithTechX
           </div>
-
         </div>
-
       </div>
     );
   }
@@ -1835,11 +1839,8 @@ export default function App() {
   // ==================================================
 
   if (!user) {
-
     return (
-
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-
         <div className="max-w-md w-full bg-white p-7 rounded-3xl border border-slate-200 shadow-xl text-center space-y-4">
 
           <ShieldAlert
@@ -1864,43 +1865,9 @@ export default function App() {
           </button>
 
         </div>
-
       </div>
     );
   }
-
-
-  // ==================================================
-  // NAVIGATION TABS
-  // ==================================================
-
-  const tabs = [
-    {
-      id: 'billing',
-      label: 'Billing Counter',
-      icon: ShoppingCart
-    },
-    {
-      id: 'history',
-      label: 'Bill History',
-      icon: ClipboardList
-    },
-    {
-      id: 'credits',
-      label: 'Credit Ledger',
-      icon: CreditCard
-    },
-    {
-      id: 'inventory',
-      label: 'Stock Lookup',
-      icon: Package
-    },
-    {
-      id: 'returns',
-      label: 'Medicine Returns',
-      icon: RotateCcw
-    }
-  ];
 
 
   // ==================================================
@@ -1908,7 +1875,6 @@ export default function App() {
   // ==================================================
 
   return (
-
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased">
 
       <style>{`
@@ -1916,33 +1882,13 @@ export default function App() {
           body * {
             visibility: hidden !important;
           }
-
-          .print-area,
-          .print-area * {
-            visibility: visible !important;
-          }
-
-          .print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            background: white !important;
-            color: black !important;
-          }
-
-          .no-print {
-            display: none !important;
-          }
         }
       `}</style>
 
 
-      {/* =================================================
-          HEADER
-      ================================================= */}
+      {/* HEADER */}
 
-      <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40 no-print">
+      <header className="bg-emerald-800 text-white shadow-md sticky top-0 z-40">
 
         <div className="max-w-7xl mx-auto px-3 sm:px-5 py-3 sm:py-4">
 
@@ -1951,13 +1897,10 @@ export default function App() {
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
 
               <div className="bg-emerald-700 p-2.5 rounded-xl border border-emerald-600 shrink-0">
-
                 <Stethoscope size={22} />
-
               </div>
 
               <div className="min-w-0">
-
                 <h1 className="text-sm sm:text-lg font-black truncate">
                   Dr. Gondhane Clinic
                 </h1>
@@ -1965,26 +1908,20 @@ export default function App() {
                 <p className="text-[9px] sm:text-xs text-emerald-200 truncate">
                   Staff Terminal · MithTechX
                 </p>
-
               </div>
 
             </div>
 
-
             <div className="flex items-center gap-2 shrink-0">
 
               <div className="hidden sm:block text-right mr-2">
-
                 <p className="text-xs font-bold">
                   {user.username}
                 </p>
-
                 <p className="text-[10px] text-emerald-200">
                   Staff Account
                 </p>
-
               </div>
-
 
               <button
                 type="button"
@@ -1997,7 +1934,6 @@ export default function App() {
               >
                 <KeyRound size={17} />
               </button>
-
 
               <button
                 type="button"
@@ -2013,17 +1949,15 @@ export default function App() {
           </div>
 
 
-          {/* MOBILE AND DESKTOP NAVIGATION */}
+          {/* NAVIGATION */}
 
           <nav className="flex gap-1.5 mt-3 overflow-x-auto pb-1 -mx-1 px-1">
 
             {tabs.map(tab => {
-
               const Icon = tab.icon;
               const active = activeTab === tab.id;
 
               return (
-
                 <button
                   key={tab.id}
                   type="button"
@@ -2034,15 +1968,10 @@ export default function App() {
                       : 'bg-emerald-900/60 text-emerald-100 hover:bg-emerald-900'
                   }`}
                 >
-
                   <Icon size={15} />
-
                   {tab.label}
-
                 </button>
-
               );
-
             })}
 
           </nav>
@@ -2052,49 +1981,28 @@ export default function App() {
       </header>
 
 
-      {/* =================================================
-          MAIN CONTENT
-      ================================================= */}
+      {/* MAIN CONTENT */}
 
-      <main className="max-w-7xl mx-auto p-3 sm:p-5 lg:p-6 w-full flex-1 space-y-5 sm:space-y-6 pb-10">
-
-
-        {/* GLOBAL DATA ERROR */}
+      <main className="max-w-7xl mx-auto p-3 sm:p-5 lg:p-6 w-full space-y-5 sm:space-y-6 pb-10">
 
         {dataError && (
-
           <Message
             error={dataError}
             onClose={() => setDataError('')}
           />
-
         )}
-
-
-        {/* REFRESH INDICATOR */}
 
         {dataLoading && (
-
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
-
-            <Loader2
-              size={14}
-              className="animate-spin"
-            />
-
+            <Loader2 size={14} className="animate-spin" />
             Updating staff data...
-
           </div>
-
         )}
 
 
-        {/* =================================================
-            PASSWORD CHANGE MODAL
-        ================================================= */}
+        {/* PASSWORD CHANGE MODAL */}
 
         {showPasswordModal && (
-
           <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
 
             <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-5 sm:p-6 space-y-5">
@@ -2116,9 +2024,7 @@ export default function App() {
 
               </div>
 
-
               {passwordMessage && (
-
                 <Message
                   error={
                     passwordMessage.includes('successfully')
@@ -2132,9 +2038,7 @@ export default function App() {
                   }
                   onClose={() => setPasswordMessage('')}
                 />
-
               )}
-
 
               <form
                 onSubmit={handleChangePassword}
@@ -2142,51 +2046,43 @@ export default function App() {
               >
 
                 <div className="relative">
-
                   <input
                     type={showNewPassword ? 'text' : 'password'}
                     required
                     minLength={8}
                     value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
+                    onChange={event => setNewPassword(event.target.value)}
                     placeholder="New password (minimum 8 characters)"
                     className={inputClass}
                   />
 
                   <button
                     type="button"
-                    onClick={() => setShowNewPassword(v => !v)}
+                    onClick={() => setShowNewPassword(value => !value)}
                     className="absolute right-3 top-3.5 text-slate-400"
                   >
                     {showNewPassword
                       ? <EyeOff size={17} />
                       : <Eye size={17} />}
                   </button>
-
                 </div>
-
 
                 <input
                   type="password"
                   required
                   minLength={8}
                   value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
+                  onChange={event => setConfirmPassword(event.target.value)}
                   placeholder="Confirm new password"
                   className={inputClass}
                 />
-
 
                 <button
                   type="submit"
                   disabled={passwordLoading}
                   className="w-full py-3 bg-emerald-700 text-white rounded-xl font-bold text-sm disabled:opacity-50"
                 >
-
-                  {passwordLoading
-                    ? 'Updating...'
-                    : 'Update Password'}
-
+                  {passwordLoading ? 'Updating...' : 'Update Password'}
                 </button>
 
               </form>
@@ -2194,22 +2090,20 @@ export default function App() {
             </div>
 
           </div>
-
         )}
 
 
         {/* =================================================
-            BILLING COUNTER
+            BILLING COUNTER - STEP 1 & STEP 2
         ================================================= */}
 
         {activeTab === 'billing' && (
 
-          <div className="space-y-5">
+          <div className="space-y-5 pb-24">
 
             <div className="flex flex-wrap justify-between items-center gap-3">
 
               <div>
-
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900">
                   Billing Counter
                 </h2>
@@ -2217,7 +2111,6 @@ export default function App() {
                 <p className="text-xs text-slate-500 mt-1">
                   Search medicines, prepare patient bills and process payments.
                 </p>
-
               </div>
 
               <div className="bg-emerald-50 text-emerald-800 rounded-xl px-3 py-2 text-xs font-bold">
@@ -2225,7 +2118,6 @@ export default function App() {
               </div>
 
             </div>
-
 
             <Message
               error={checkoutError}
@@ -2236,26 +2128,18 @@ export default function App() {
               }}
             />
 
-
             {partialCheckout && (
-
               <div className="bg-amber-50 border border-amber-300 p-4 rounded-2xl text-amber-900">
-
                 <p className="text-xs font-black">
                   Administrator assistance required
                 </p>
-
                 <p className="text-xs mt-1">
-                  A bill was created, but a later operation failed. Do not submit the same bill again. Ask the administrator to reconcile the bill and stock.
+                  A database operation failed after some records may have been saved. Do not submit this bill again. Ask the administrator to inspect the bill, inventory and credits.
                 </p>
-
               </div>
-
             )}
 
-
             {whatsappUrl && (
-
               <a
                 href={whatsappUrl}
                 target="_blank"
@@ -2265,244 +2149,361 @@ export default function App() {
                 <Send size={15} />
                 Open WhatsApp Receipt
               </a>
+            )}
+
+
+            {/* STEP 1: CATEGORY AND MEDICINE SELECTION */}
+
+            {billingStep === 1 && (
+
+              <div className="flex flex-col lg:flex-row gap-5">
+
+                {/* CATEGORY SIDEBAR */}
+
+                <aside className="w-full lg:w-60 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm shrink-0 h-fit">
+
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                    <Filter size={17} className="text-emerald-700" />
+                    <h3 className="font-black text-sm text-slate-900">
+                      Categories
+                    </h3>
+                  </div>
+
+                  <div className="flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pt-3 pb-1">
+
+                    {categories.map(category => (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => setSelectedCategory(category)}
+                        className={`shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold transition text-left ${
+                          selectedCategory === category
+                            ? 'bg-emerald-700 text-white shadow-md'
+                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        {category}
+                      </button>
+                    ))}
+
+                  </div>
+
+                </aside>
+
+
+                {/* MEDICINE CATALOG */}
+
+                <section className="flex-1 min-w-0 space-y-4">
+
+                  <div className="bg-white p-4 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm">
+
+                    <div className="relative">
+
+                      <Search
+                        size={18}
+                        className="absolute left-4 top-3.5 text-slate-400"
+                      />
+
+                      <input
+                        type="text"
+                        placeholder="Search medicines by name, category or batch..."
+                        value={searchQuery}
+                        onChange={event => setSearchQuery(event.target.value)}
+                        className={`${inputClass} pl-11`}
+                      />
+
+                    </div>
+
+                    <div className="flex items-center justify-between mt-3 gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">
+                        {selectedCategory} Medicines
+                      </span>
+
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                        {filteredMedicines.length} Items
+                      </span>
+                    </div>
+
+                  </div>
+
+
+                  {loading ? (
+                    <div className="bg-white rounded-2xl p-10 text-center">
+                      <Loader2 size={25} className="animate-spin mx-auto text-emerald-700" />
+                      <p className="text-xs text-slate-400 mt-3">
+                        Loading medicines...
+                      </p>
+                    </div>
+                  ) : loadError ? (
+                    <Message
+                      error={loadError}
+                      onClose={() => setLoadError('')}
+                    />
+                  ) : (
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+
+                      {filteredMedicines.map(medicine => {
+                        const inCart = cart.find(
+                          item => item.id === medicine.id
+                        );
+
+                        const expired = isMedicineExpired(medicine);
+                        const stock = Number(medicine.stock || 0);
+
+                        return (
+                          <button
+                            type="button"
+                            key={medicine.id}
+                            disabled={stock <= 0 || expired}
+                            onClick={() => addToCart(medicine)}
+                            className={`bg-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border transition text-left flex flex-col justify-between min-w-0 min-h-36 sm:min-h-40 ${
+                              inCart
+                                ? 'border-emerald-500 bg-emerald-50/30 shadow-sm'
+                                : 'border-slate-200 hover:border-emerald-400'
+                            } ${
+                              stock <= 0 || expired
+                                ? 'opacity-50 cursor-not-allowed'
+                                : 'cursor-pointer'
+                            }`}
+                          >
+
+                            <div className="space-y-2 min-w-0">
+
+                              <div className="flex justify-between items-start gap-1">
+
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md max-w-[75%] truncate">
+                                  {medicine.category || 'General'}
+                                </span>
+
+                                {inCart && (
+                                  <span className="w-5 h-5 shrink-0 bg-emerald-700 text-white rounded-full text-[10px] font-bold flex items-center justify-center">
+                                    {inCart.qty}
+                                  </span>
+                                )}
+
+                              </div>
+
+                              <h4 className="font-bold text-slate-900 text-xs sm:text-sm break-words line-clamp-2">
+                                {medicine.name}
+                              </h4>
+
+                              <p className="text-[9px] text-slate-400">
+                                Batch: {medicine.batch_no || '—'}
+                              </p>
+
+                            </div>
+
+                            <div className="pt-3 mt-3 border-t border-slate-100 space-y-2">
+
+                              <div className="flex justify-between items-center gap-1">
+
+                                <span className="text-xs font-black text-emerald-700">
+                                  {money(medicine.selling_price || medicine.price)}
+                                </span>
+
+                                <span className={`text-[9px] font-bold px-2 py-1 rounded-lg ${
+                                  expired
+                                    ? 'bg-rose-50 text-rose-700'
+                                    : stock <= 5
+                                      ? 'bg-amber-50 text-amber-700'
+                                      : 'bg-emerald-50 text-emerald-700'
+                                }`}>
+                                  {expired ? 'EXPIRED' : `Stock: ${stock}`}
+                                </span>
+
+                              </div>
+
+                              <p className="text-center text-[10px] font-bold text-emerald-700">
+                                {expired
+                                  ? 'Not available'
+                                  : stock <= 0
+                                    ? 'Out of stock'
+                                    : inCart
+                                      ? 'Add another'
+                                      : '+ Add to bill'}
+                              </p>
+
+                            </div>
+
+                          </button>
+                        );
+                      })}
+
+                    </div>
+
+                  )}
+
+                  {!loading && !loadError && filteredMedicines.length === 0 && (
+                    <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
+                      <Package size={28} className="mx-auto text-slate-300" />
+                      <p className="text-sm font-bold text-slate-600 mt-3">
+                        No medicines found
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Try another search or category.
+                      </p>
+                    </div>
+                  )}
+
+                </section>
+
+              </div>
 
             )}
 
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* STEP 2: PATIENT AND PAYMENT */}
 
+            {billingStep === 2 && (
 
-              {/* MEDICINE CATALOG */}
+              <div className="max-w-3xl mx-auto bg-white p-4 sm:p-6 lg:p-8 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm space-y-5">
 
-              <section className="lg:col-span-2 space-y-4 min-w-0">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-4 gap-2">
 
-                <div className="bg-white p-4 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm">
+                  <div className="flex items-center gap-3 min-w-0">
 
-                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setBillingStep(1)}
+                      className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl shrink-0"
+                    >
+                      <ArrowLeft size={18} />
+                    </button>
 
-                    <Search
-                      size={18}
-                      className="absolute left-4 top-3.5 text-slate-400"
-                    />
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full">
+                        Step 2 of 2
+                      </span>
 
-                    <input
-                      type="text"
-                      placeholder="Search medicines by name, category or batch..."
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                      className={`${inputClass} pl-11`}
-                    />
+                      <h3 className="font-black text-slate-900 text-lg mt-2">
+                        Current Bill Counter
+                      </h3>
+                    </div>
 
                   </div>
 
-                </div>
-
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-
-                  {filteredMedicines.map(med => {
-
-                    const expired = isMedicineExpired(med);
-                    const stock = Number(med.stock || 0);
-
-                    return (
-
-                      <button
-                        type="button"
-                        key={med.id}
-                        disabled={stock <= 0 || expired}
-                        onClick={() => addToCart(med)}
-                        className={`text-left p-4 bg-white rounded-2xl border shadow-sm transition ${
-                          stock <= 0 || expired
-                            ? 'opacity-50 border-slate-200 cursor-not-allowed'
-                            : 'border-slate-200 hover:border-emerald-500 hover:shadow-md'
-                        }`}
-                      >
-
-                        <div className="flex items-start justify-between gap-2">
-
-                          <span className="text-[10px] font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded-lg">
-                            {med.category || 'General'}
-                          </span>
-
-                          {expired ? (
-
-                            <span className="text-[9px] bg-rose-50 text-rose-700 px-2 py-1 rounded-lg font-bold">
-                              EXPIRED
-                            </span>
-
-                          ) : stock <= 5 ? (
-
-                            <span className="text-[9px] bg-amber-50 text-amber-700 px-2 py-1 rounded-lg font-bold">
-                              LOW STOCK
-                            </span>
-
-                          ) : (
-
-                            <span className="text-[9px] bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg font-bold">
-                              AVAILABLE
-                            </span>
-
-                          )}
-
-                        </div>
-
-
-                        <h4 className="font-black text-slate-900 mt-3 text-sm break-words">
-                          {med.name}
-                        </h4>
-
-                        <p className="text-[10px] text-slate-400 mt-1">
-                          Batch: {med.batch_no || '—'}
-                        </p>
-
-
-                        <div className="mt-4 flex justify-between items-center gap-2">
-
-                          <span className="text-emerald-700 font-black text-sm">
-                            {money(med.selling_price)}
-                          </span>
-
-                          <span className="text-[10px] font-bold text-slate-500">
-                            Stock: {stock}
-                          </span>
-
-                        </div>
-
-
-                        <div className="mt-3 pt-3 border-t border-slate-100 text-center text-[10px] font-bold text-emerald-700">
-                          {expired
-                            ? 'Not available for billing'
-                            : stock <= 0
-                              ? 'Out of stock'
-                              : '+ Add to bill'}
-                        </div>
-
-                      </button>
-
-                    );
-
-                  })}
-
-                </div>
-
-
-                {filteredMedicines.length === 0 && (
-
-                  <div className="bg-white p-10 rounded-2xl border border-slate-200 text-center text-xs text-slate-400">
-                    No matching medicines found.
-                  </div>
-
-                )}
-
-              </section>
-
-
-              {/* BILL CART */}
-
-              <section className="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm space-y-4 min-w-0 h-fit">
-
-                <div className="flex justify-between items-center">
-
-                  <h3 className="font-black text-slate-900 flex gap-2 items-center">
-                    <ShoppingCart size={18} className="text-emerald-700" />
-                    Counter Bill
-                  </h3>
-
-                  <span className="text-[10px] font-bold bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg">
-                    {cart.length} Items
+                  <span className="text-[10px] sm:text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl shrink-0">
+                    {totalCartQty} Units
                   </span>
 
                 </div>
 
 
-                {/* PATIENT INFORMATION */}
+                {/* PATIENT DETAILS */}
 
-                <div className="space-y-2.5">
+                <div className="space-y-3">
 
-                  <input
-                    type="text"
-                    placeholder="Patient Name"
-                    value={patient.name}
-                    onChange={e => setPatient(p => ({
-                      ...p,
-                      name: e.target.value
-                    }))}
-                    className={inputClass}
-                  />
+                  <h4 className="text-xs uppercase tracking-wider font-black text-slate-500">
+                    Patient Information
+                  </h4>
 
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    placeholder="Patient Phone Number"
-                    value={patient.phone}
-                    onChange={e => setPatient(p => ({
-                      ...p,
-                      phone: e.target.value
-                    }))}
-                    className={inputClass}
-                  />
+                  <div className="relative">
+                    <User
+                      size={16}
+                      className="absolute left-4 top-3.5 text-slate-400"
+                    />
 
-                  <input
-                    type="text"
-                    placeholder="Locality / Address"
-                    value={patient.locality}
-                    onChange={e => setPatient(p => ({
-                      ...p,
-                      locality: e.target.value
-                    }))}
-                    className={inputClass}
-                  />
+                    <input
+                      type="text"
+                      placeholder="Patient Name *"
+                      value={patient.name}
+                      onChange={event =>
+                        setPatient(current => ({
+                          ...current,
+                          name: event.target.value
+                        }))
+                      }
+                      className={`${inputClass} pl-11`}
+                      required
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <Phone
+                      size={16}
+                      className="absolute left-4 top-3.5 text-slate-400"
+                    />
+
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="Phone Number (for WhatsApp and Credit)"
+                      value={patient.phone}
+                      onChange={event =>
+                        setPatient(current => ({
+                          ...current,
+                          phone: event.target.value
+                        }))
+                      }
+                      className={`${inputClass} pl-11`}
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <MapPin
+                      size={16}
+                      className="absolute left-4 top-3.5 text-slate-400"
+                    />
+
+                    <input
+                      type="text"
+                      placeholder="Locality / Address"
+                      value={patient.locality}
+                      onChange={event =>
+                        setPatient(current => ({
+                          ...current,
+                          locality: event.target.value
+                        }))
+                      }
+                      className={`${inputClass} pl-11`}
+                    />
+                  </div>
 
                 </div>
 
 
-                {/* OLD BALANCE */}
+                {/* EXISTING CREDIT */}
 
                 {existingCredit > 0 && (
 
-                  <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-2xl space-y-3">
+                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl space-y-3">
 
-                    <div className="flex justify-between items-center gap-2">
-
-                      <span className="text-xs font-bold text-amber-800">
-                        Existing Pending Due
-                      </span>
-
-                      <span className="text-sm font-black text-rose-600">
+                    <div className="flex justify-between items-center gap-2 text-xs font-bold text-amber-900">
+                      <span>Existing Pending Due</span>
+                      <span className="text-rose-600 text-sm font-black">
                         {money(existingCredit)}
                       </span>
-
                     </div>
 
-
-                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer pt-2 border-t border-amber-100">
 
                       <input
                         type="checkbox"
                         checked={payOldBalance}
-                        onChange={e => setPayOldBalance(e.target.checked)}
-                        className="w-4 h-4 accent-emerald-700"
+                        onChange={event =>
+                          setPayOldBalance(event.target.checked)
+                        }
+                        className="rounded text-emerald-700 w-4 h-4"
                       />
 
                       Pay old balance now
 
                     </label>
 
-
                     {payOldBalance && (
-
                       <input
                         type="number"
                         min="0.01"
-                        step="0.01"
                         max={existingCredit}
+                        step="0.01"
                         value={partialOldPay}
-                        onChange={e => setPartialOldPay(e.target.value)}
-                        placeholder="Payment amount"
-                        className={inputClass}
+                        onChange={event =>
+                          setPartialOldPay(event.target.value)
+                        }
+                        placeholder="Full or partial payment"
+                        className={`${inputClass} bg-white border-amber-300`}
                       />
-
                     )}
 
                   </div>
@@ -2512,113 +2513,93 @@ export default function App() {
 
                 {/* CART ITEMS */}
 
-                <div className="border-y border-slate-100 py-3 space-y-2 max-h-64 overflow-y-auto">
+                <div className="border-y border-slate-100 py-4 space-y-3">
 
-                  {cart.length === 0 ? (
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs uppercase tracking-wider font-black text-slate-500">
+                      Selected Medicines
+                    </h4>
 
-                    <div className="text-center py-7">
+                    <button
+                      type="button"
+                      onClick={() => setBillingStep(1)}
+                      className="text-[10px] font-bold text-emerald-700"
+                    >
+                      + Add More Medicines
+                    </button>
+                  </div>
 
-                      <ShoppingCart size={25} className="mx-auto text-slate-300" />
+                  {cart.map(item => (
+                    <div
+                      key={item.id}
+                      className="flex justify-between items-center text-xs bg-slate-50 p-3 rounded-2xl border border-slate-100 gap-2"
+                    >
 
-                      <p className="text-xs text-slate-400 mt-2">
-                        No medicines added yet.
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-slate-900 break-words">
+                          {item.name}
+                        </p>
+                        <p className="text-emerald-700 font-semibold mt-1">
+                          {money(item.selling_price || item.price)} each
+                        </p>
+                      </div>
 
-                    </div>
+                      <div className="flex items-center gap-1 shrink-0">
 
-                  ) : (
+                        <button
+                          type="button"
+                          onClick={() => updateQty(item.id, item.qty - 1)}
+                          className="w-8 h-8 bg-white border border-slate-200 rounded-lg font-bold"
+                        >
+                          −
+                        </button>
 
-                    cart.map(item => (
+                        <span className="w-7 text-center font-bold">
+                          {item.qty}
+                        </span>
 
-                      <div
-                        key={item.id}
-                        className="bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2"
-                      >
+                        <button
+                          type="button"
+                          onClick={() => updateQty(item.id, item.qty + 1)}
+                          className="w-8 h-8 bg-white border border-slate-200 rounded-lg font-bold"
+                        >
+                          +
+                        </button>
 
-                        <div className="flex justify-between gap-2">
-
-                          <div className="min-w-0">
-
-                            <p className="text-xs font-black text-slate-900 break-words">
-                              {item.name}
-                            </p>
-
-                            <p className="text-[10px] text-slate-500 mt-1">
-                              {money(item.selling_price)} each
-                            </p>
-
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => updateQty(item.id, 0)}
-                            className="text-rose-600 p-1 shrink-0"
-                            title="Remove item"
-                          >
-                            <X size={16} />
-                          </button>
-
-                        </div>
-
-
-                        <div className="flex items-center justify-between gap-2">
-
-                          <div className="flex items-center gap-2">
-
-                            <button
-                              type="button"
-                              onClick={() => updateQty(item.id, item.qty - 1)}
-                              className="w-8 h-8 rounded-lg bg-white border border-slate-200 font-bold"
-                            >
-                              −
-                            </button>
-
-                            <input
-                              type="number"
-                              min="1"
-                              max={item.stock}
-                              value={item.qty}
-                              onChange={e => updateQty(item.id, e.target.value)}
-                              className="w-12 h-8 rounded-lg border border-slate-200 text-center text-xs font-bold"
-                            />
-
-                            <button
-                              type="button"
-                              onClick={() => updateQty(item.id, item.qty + 1)}
-                              className="w-8 h-8 rounded-lg bg-white border border-slate-200 font-bold"
-                            >
-                              +
-                            </button>
-
-                          </div>
-
-                          <p className="text-xs font-black text-slate-900">
-                            {money(item.qty * item.selling_price)}
-                          </p>
-
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFromCart(item.id)}
+                          className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg ml-1"
+                          title="Remove item"
+                        >
+                          <Trash2 size={15} />
+                        </button>
 
                       </div>
 
-                    ))
+                    </div>
+                  ))}
 
+                  {cart.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-4">
+                      No medicines selected. You can still process an old balance payment.
+                    </p>
                   )}
 
                 </div>
 
 
-                {/* DISCOUNT */}
+                {/* DISCOUNTS */}
 
-                <div className="space-y-2">
+                <div className="border-t border-slate-100 pt-3 space-y-3">
 
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">
-                    Discount
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    Discounts
                   </label>
 
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-4 gap-2">
 
                     {[5, 10, 15, 20].map(percent => (
-
                       <button
                         key={percent}
                         type="button"
@@ -2626,37 +2607,33 @@ export default function App() {
                           setDiscountType('percent');
                           setDiscountValue(String(percent));
                         }}
-                        className={`py-2 rounded-lg border text-xs font-bold ${
+                        className={`py-2.5 rounded-xl text-xs font-bold border transition ${
                           discountType === 'percent' &&
                           Number(discountValue) === percent
-                            ? 'bg-emerald-700 text-white border-emerald-700'
-                            : 'bg-slate-50 border-slate-200 text-slate-600'
+                            ? 'bg-slate-900 text-white border-slate-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                         }`}
                       >
                         {percent}%
                       </button>
-
                     ))}
 
                   </div>
-
 
                   <input
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="Custom flat discount (₹)"
+                    placeholder="Flat discount amount (₹)"
                     value={discountType === 'flat' ? discountValue : ''}
-                    onChange={e => {
+                    onChange={event => {
                       setDiscountType('flat');
-                      setDiscountValue(e.target.value);
+                      setDiscountValue(event.target.value);
                     }}
                     className={inputClass}
                   />
 
-
                   {discountType !== 'none' && (
-
                     <button
                       type="button"
                       onClick={() => {
@@ -2667,7 +2644,6 @@ export default function App() {
                     >
                       Clear discount
                     </button>
-
                   )}
 
                 </div>
@@ -2675,52 +2651,47 @@ export default function App() {
 
                 {/* PAYMENT MODE */}
 
-                <div className="space-y-2">
+                <div className="border-t border-slate-100 pt-4 space-y-3">
 
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                     Payment Mode
                   </label>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
 
                     {[
-                      ['cash', 'Cash'],
-                      ['online', 'Online'],
-                      ['credit', 'Credit'],
-                      ['split', 'Split']
-                    ].map(([id, label]) => (
-
+                      { id: 'cash', label: 'Cash' },
+                      { id: 'online', label: 'Online' },
+                      { id: 'credit', label: 'Credit' },
+                      { id: 'split', label: 'Split' }
+                    ].map(mode => (
                       <button
-                        key={id}
+                        key={mode.id}
                         type="button"
-                        onClick={() => setPaymentMode(id)}
-                        className={`py-2.5 rounded-xl border text-xs font-bold ${
-                          paymentMode === id
+                        onClick={() => setPaymentMode(mode.id)}
+                        className={`py-3 rounded-xl text-xs font-bold border transition ${
+                          paymentMode === mode.id
                             ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-slate-50 text-slate-600 border-slate-200'
+                            : 'bg-slate-50 border-slate-200 text-slate-700'
                         }`}
                       >
-                        {label}
+                        {mode.label}
                       </button>
-
                     ))}
 
                   </div>
 
-
                   {paymentMode === 'split' && (
-
                     <input
                       type="number"
                       min="0"
-                      step="0.01"
                       max={grandTotal}
-                      value={cashPaid}
-                      onChange={e => setCashPaid(e.target.value)}
+                      step="0.01"
                       placeholder="Amount paid now"
+                      value={cashPaid}
+                      onChange={event => setCashPaid(event.target.value)}
                       className={inputClass}
                     />
-
                   )}
 
                 </div>
@@ -2728,100 +2699,130 @@ export default function App() {
 
                 {/* BILL TOTALS */}
 
-                <div className="border-t border-slate-100 pt-3 space-y-2 text-xs">
+                <div className="border-t border-slate-100 pt-4 bg-slate-50 p-4 rounded-2xl space-y-2 text-xs text-slate-600">
 
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Subtotal</span>
-                    <span className="font-bold">{money(subtotal)}</span>
+                    <span>Subtotal</span>
+                    <span>{money(subtotal)}</span>
                   </div>
 
                   {discountAmount > 0 && (
-
-                    <div className="flex justify-between text-rose-600">
-                      <span>Discount</span>
-                      <span className="font-bold">−{money(discountAmount)}</span>
+                    <div className="flex justify-between text-emerald-700 font-semibold">
+                      <span>Discount Applied</span>
+                      <span>−{money(discountAmount)}</span>
                     </div>
-
                   )}
 
-                  <div className="flex justify-between font-black text-sm">
+                  <div className="flex justify-between pt-2 border-t border-slate-200 font-black text-slate-900 text-base">
                     <span>Current Bill Total</span>
                     <span className="text-emerald-700">
                       {money(grandTotal)}
                     </span>
                   </div>
 
-                  {payOldBalance && oldBalanceToAdd > 0 && (
-
-                    <div className="flex justify-between text-amber-700">
-                      <span>Old Balance Payment</span>
-                      <span className="font-bold">
-                        {money(oldBalanceToAdd)}
-                      </span>
-                    </div>
-
-                  )}
-
-                  <div className="flex justify-between border-t border-slate-100 pt-2">
-
-                    <span className="font-bold text-slate-700">
-                      Total Collection
-                    </span>
-
-                    <span className="font-black text-lg text-slate-900">
-                      {money(totalCollection)}
-                    </span>
-
-                  </div>
-
-                  <div className="flex justify-between text-emerald-700">
-                    <span>Paid on current bill</span>
+                  <div className="flex justify-between">
+                    <span>Paid on Current Bill</span>
                     <span>{money(currentBillPaid)}</span>
                   </div>
 
-                  <div className="flex justify-between text-rose-600">
-                    <span>New bill credit</span>
+                  <div className="flex justify-between text-rose-600 font-semibold">
+                    <span>New Bill Due</span>
                     <span>{money(newCreditAmount)}</span>
+                  </div>
+
+                  {payOldBalance && oldBalanceToAdd > 0 && (
+                    <div className="flex justify-between text-amber-700 font-semibold">
+                      <span>Old Balance Payment</span>
+                      <span>{money(oldBalanceToAdd)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center pt-3 border-t border-slate-200 font-black text-slate-900 text-base">
+                    <span>Total Collection</span>
+                    <span className="text-xl sm:text-2xl text-emerald-700">
+                      {money(totalCollection)}
+                    </span>
                   </div>
 
                 </div>
 
 
-                {/* CHECKOUT */}
+                {/* CHECKOUT BUTTONS */}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
 
                   <button
                     type="button"
                     disabled={checkoutLoading || partialCheckout}
                     onClick={() => handleCheckout(false)}
-                    className="py-3.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs flex justify-center items-center gap-2 disabled:opacity-50"
+                    className="py-3.5 bg-slate-900 hover:bg-black text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-md disabled:opacity-50"
                   >
-
                     {checkoutLoading
-                      ? <Loader2 size={15} className="animate-spin" />
-                      : <Save size={15} />}
-
-                    Save Bill
-
+                      ? <Loader2 size={16} className="animate-spin" />
+                      : <Save size={16} />}
+                    Save Bill & Items
                   </button>
-
 
                   <button
                     type="button"
                     disabled={checkoutLoading || partialCheckout}
                     onClick={() => handleCheckout(true)}
-                    className="py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs flex justify-center items-center gap-2 disabled:opacity-50"
+                    className="py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-md disabled:opacity-50"
                   >
-                    <Send size={15} />
-                    WhatsApp
+                    <Send size={16} />
+                    Save & WhatsApp
                   </button>
 
                 </div>
 
-              </section>
+              </div>
 
-            </div>
+            )}
+
+
+            {/* FIXED CART BAR ON STEP 1 */}
+
+            {billingStep === 1 && (
+              <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 sm:p-4 shadow-2xl z-40">
+
+                <div className="max-w-7xl mx-auto flex justify-between items-center gap-3">
+
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+
+                    <div className="bg-emerald-700 text-white p-2.5 rounded-xl shrink-0">
+                      <ShoppingCart size={20} />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
+                        Selected Cart
+                      </p>
+
+                      <p className="text-xs sm:text-base font-black text-slate-900 truncate">
+                        {totalCartQty} Units · {money(subtotal)}
+                      </p>
+                    </div>
+
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={cart.length === 0}
+                    onClick={() => {
+                      setCheckoutError('');
+                      setCheckoutSuccess('');
+                      setBillingStep(2);
+                    }}
+                    className="px-3 sm:px-6 py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-sm shadow-lg flex items-center gap-1.5 sm:gap-2 shrink-0"
+                  >
+                    Next: Billing
+                    <ArrowRight size={17} />
+                  </button>
+
+                </div>
+
+              </div>
+            )}
 
           </div>
 
@@ -2836,11 +2837,9 @@ export default function App() {
 
           <div className="space-y-4">
 
-
             <div className="flex flex-wrap justify-between items-center gap-3">
 
               <div>
-
                 <h2 className="text-xl sm:text-2xl font-black text-slate-900">
                   Patient Bill History
                 </h2>
@@ -2848,7 +2847,6 @@ export default function App() {
                 <p className="text-xs text-slate-500 mt-1">
                   View and print bills. Staff cannot delete bills.
                 </p>
-
               </div>
 
               <div className="bg-amber-50 text-amber-700 border border-amber-100 rounded-xl px-3 py-2 text-[10px] font-bold flex items-center gap-1.5">
@@ -2858,11 +2856,8 @@ export default function App() {
 
             </div>
 
-
             <div className="bg-white p-3 rounded-2xl border border-slate-200">
-
               <div className="relative">
-
                 <Search
                   size={17}
                   className="absolute left-4 top-3.5 text-slate-400"
@@ -2871,12 +2866,10 @@ export default function App() {
                 <input
                   className={`${inputClass} pl-11`}
                   value={historySearch}
-                  onChange={e => setHistorySearch(e.target.value)}
+                  onChange={event => setHistorySearch(event.target.value)}
                   placeholder="Search patient, phone or bill ID..."
                 />
-
               </div>
-
             </div>
 
 
@@ -2885,35 +2878,27 @@ export default function App() {
             <div className="md:hidden space-y-3">
 
               {filteredBills.map(bill => (
-
                 <div
                   key={bill.id}
                   className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3"
                 >
 
                   <div className="flex justify-between items-start gap-2">
-
                     <div className="min-w-0">
-
                       <p className="font-black text-slate-900 text-sm">
                         {bill.patient_name}
                       </p>
-
                       <p className="text-[10px] text-slate-400 mt-1">
                         {formatDateTime(bill.created_at)}
                       </p>
-
                     </div>
 
                     <span className="text-sm font-black text-emerald-700 whitespace-nowrap">
                       {money(bill.total_amount)}
                     </span>
-
                   </div>
 
-
                   <div className="grid grid-cols-2 gap-2 text-xs">
-
                     <div>
                       <p className="text-slate-400">Phone</p>
                       <p className="font-semibold text-slate-700">
@@ -2927,9 +2912,7 @@ export default function App() {
                         {bill.locality}
                       </p>
                     </div>
-
                   </div>
-
 
                   <button
                     type="button"
@@ -2937,11 +2920,10 @@ export default function App() {
                     className="w-full bg-emerald-50 text-emerald-800 py-2.5 rounded-xl text-xs font-bold flex justify-center items-center gap-2"
                   >
                     <Eye size={15} />
-                    View / Print Receipt
+                    View Receipt
                   </button>
 
                 </div>
-
               ))}
 
             </div>
@@ -2950,7 +2932,6 @@ export default function App() {
             {/* DESKTOP TABLE */}
 
             <div className="hidden md:block bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-
               <div className="overflow-x-auto">
 
                 <table className="w-full text-left text-sm">
@@ -2969,7 +2950,6 @@ export default function App() {
                   <tbody className="divide-y divide-slate-100">
 
                     {filteredBills.map(bill => (
-
                       <tr key={bill.id}>
 
                         <td className="p-4 text-xs text-slate-500 whitespace-nowrap">
@@ -2993,7 +2973,6 @@ export default function App() {
                         </td>
 
                         <td className="p-4 text-right">
-
                           <button
                             type="button"
                             onClick={() => setSelectedBill(bill)}
@@ -3002,11 +2981,9 @@ export default function App() {
                             <Eye size={14} className="inline mr-1" />
                             View
                           </button>
-
                         </td>
 
                       </tr>
-
                     ))}
 
                   </tbody>
@@ -3014,16 +2991,12 @@ export default function App() {
                 </table>
 
               </div>
-
             </div>
 
-
             {filteredBills.length === 0 && (
-
               <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-xs text-slate-400">
                 No matching bills found.
               </div>
-
             )}
 
           </div>
@@ -3040,7 +3013,6 @@ export default function App() {
           <div className="space-y-4">
 
             <div>
-
               <h2 className="text-xl sm:text-2xl font-black text-slate-900">
                 Customer Credit Ledger
               </h2>
@@ -3048,15 +3020,13 @@ export default function App() {
               <p className="text-xs text-slate-500 mt-1">
                 View pending dues, contact patients and settle payments.
               </p>
-
             </div>
-
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
               <SummaryCard
                 title="Pending Accounts"
-                value={credits.filter(c => c.status === 'Pending').length}
+                value={credits.filter(credit => credit.status === 'Pending').length}
                 icon={CreditCard}
                 color="amber"
               />
@@ -3065,10 +3035,10 @@ export default function App() {
                 title="Total Pending Due"
                 value={money(
                   credits
-                    .filter(c => c.status === 'Pending')
+                    .filter(credit => credit.status === 'Pending')
                     .reduce(
-                      (sum, c) =>
-                        sum + Number(c.credit_amount || 0),
+                      (sum, credit) =>
+                        sum + Number(credit.credit_amount || 0),
                       0
                     )
                 )}
@@ -3078,18 +3048,15 @@ export default function App() {
 
               <SummaryCard
                 title="Settled Accounts"
-                value={credits.filter(c => c.status === 'Settled').length}
+                value={credits.filter(credit => credit.status === 'Settled').length}
                 icon={CheckCircle}
                 color="emerald"
               />
 
             </div>
 
-
             <div className="bg-white p-4 rounded-2xl border border-slate-200">
-
               <div className="relative">
-
                 <Search
                   size={16}
                   className="absolute left-4 top-3.5 text-slate-400"
@@ -3098,12 +3065,10 @@ export default function App() {
                 <input
                   className={`${inputClass} pl-11`}
                   value={creditSearch}
-                  onChange={e => setCreditSearch(e.target.value)}
+                  onChange={event => setCreditSearch(event.target.value)}
                   placeholder="Search patient or phone number..."
                 />
-
               </div>
-
             </div>
 
 
@@ -3112,24 +3077,19 @@ export default function App() {
             <div className="md:hidden space-y-3">
 
               {filteredCredits.map(credit => (
-
                 <div
                   key={credit.id}
                   className="bg-white p-4 border border-slate-200 rounded-2xl space-y-3"
                 >
 
                   <div className="flex justify-between gap-2">
-
                     <div>
-
                       <p className="font-black text-sm text-slate-900">
                         {credit.patient_name}
                       </p>
-
                       <p className="text-[10px] text-slate-400 mt-1">
                         {formatDate(credit.created_at)}
                       </p>
-
                     </div>
 
                     <span className={`h-fit px-2 py-1 rounded-lg text-[10px] font-bold ${
@@ -3139,12 +3099,9 @@ export default function App() {
                     }`}>
                       {credit.status}
                     </span>
-
                   </div>
 
-
                   <div className="grid grid-cols-2 gap-3 text-xs">
-
                     <div>
                       <p className="text-slate-400">Phone</p>
                       <p className="font-bold">
@@ -3158,9 +3115,7 @@ export default function App() {
                         {money(credit.credit_amount)}
                       </p>
                     </div>
-
                   </div>
-
 
                   <div className="flex gap-2">
 
@@ -3172,9 +3127,7 @@ export default function App() {
                       Call
                     </a>
 
-
                     {credit.status === 'Pending' && (
-
                       <button
                         type="button"
                         disabled={creditLoadingId === credit.id}
@@ -3185,13 +3138,11 @@ export default function App() {
                           ? 'Saving...'
                           : 'Settle'}
                       </button>
-
                     )}
 
                   </div>
 
                 </div>
-
               ))}
 
             </div>
@@ -3200,7 +3151,6 @@ export default function App() {
             {/* DESKTOP CREDIT TABLE */}
 
             <div className="hidden md:block bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-
               <div className="overflow-x-auto">
 
                 <table className="w-full text-left text-sm">
@@ -3221,7 +3171,6 @@ export default function App() {
                   <tbody className="divide-y divide-slate-100">
 
                     {filteredCredits.map(credit => (
-
                       <tr key={credit.id}>
 
                         <td className="p-4 text-xs text-slate-500">
@@ -3271,7 +3220,6 @@ export default function App() {
                             </a>
 
                             {credit.status === 'Pending' && (
-
                               <button
                                 type="button"
                                 onClick={() => settleCredit(credit)}
@@ -3282,7 +3230,6 @@ export default function App() {
                                   ? 'Saving...'
                                   : 'Settle'}
                               </button>
-
                             )}
 
                           </div>
@@ -3290,7 +3237,6 @@ export default function App() {
                         </td>
 
                       </tr>
-
                     ))}
 
                   </tbody>
@@ -3298,16 +3244,12 @@ export default function App() {
                 </table>
 
               </div>
-
             </div>
 
-
             {filteredCredits.length === 0 && (
-
               <div className="bg-white rounded-2xl p-10 text-center text-xs text-slate-400">
                 No credit records found.
               </div>
-
             )}
 
           </div>
@@ -3324,7 +3266,6 @@ export default function App() {
           <div className="space-y-4">
 
             <div>
-
               <h2 className="text-xl sm:text-2xl font-black text-slate-900">
                 Medicine Stock Lookup
               </h2>
@@ -3332,14 +3273,10 @@ export default function App() {
               <p className="text-xs text-slate-500 mt-1">
                 Check stock, batches and expiry dates before billing.
               </p>
-
             </div>
 
-
             <div className="bg-white p-4 rounded-2xl border border-slate-200">
-
               <div className="relative">
-
                 <Search
                   size={17}
                   className="absolute left-4 top-3.5 text-slate-400"
@@ -3348,13 +3285,11 @@ export default function App() {
                 <input
                   type="text"
                   value={stockSearch}
-                  onChange={e => setStockSearch(e.target.value)}
+                  onChange={event => setStockSearch(event.target.value)}
                   placeholder="Search medicine, category or batch..."
                   className={`${inputClass} pl-11`}
                 />
-
               </div>
-
             </div>
 
 
@@ -3362,78 +3297,60 @@ export default function App() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:hidden gap-3">
 
-              {filteredStock.map(med => (
-
+              {filteredStock.map(medicine => (
                 <div
-                  key={med.id}
+                  key={medicine.id}
                   className="bg-white p-4 border border-slate-200 rounded-2xl space-y-3"
                 >
 
                   <div className="flex justify-between gap-2">
-
                     <div className="min-w-0">
-
                       <p className="font-black text-sm text-slate-900 break-words">
-                        {med.name}
+                        {medicine.name}
                       </p>
-
                       <p className="text-[10px] text-slate-400 mt-1">
-                        {med.category || 'General'}
+                        {medicine.category || 'General'}
                       </p>
-
                     </div>
 
                     <span className={`h-fit px-2 py-1 rounded-lg text-[10px] font-bold ${
-                      isMedicineExpired(med)
+                      isMedicineExpired(medicine)
                         ? 'bg-rose-50 text-rose-700'
-                        : Number(med.stock || 0) <= 5
+                        : Number(medicine.stock || 0) <= 5
                           ? 'bg-amber-50 text-amber-700'
                           : 'bg-emerald-50 text-emerald-700'
                     }`}>
-                      {isMedicineExpired(med)
+                      {isMedicineExpired(medicine)
                         ? 'EXPIRED'
-                        : `${med.stock || 0} units`}
+                        : `${medicine.stock || 0} units`}
                     </span>
-
                   </div>
 
-
                   <div className="grid grid-cols-2 gap-3">
-
                     <div className="bg-slate-50 rounded-xl p-3">
-
                       <p className="text-[10px] uppercase text-slate-400 font-bold">
                         Price
                       </p>
-
                       <p className="text-sm font-black text-emerald-700 mt-1">
-                        {money(med.selling_price)}
+                        {money(medicine.selling_price)}
                       </p>
-
                     </div>
 
-
                     <div className="bg-slate-50 rounded-xl p-3">
-
                       <p className="text-[10px] uppercase text-slate-400 font-bold">
                         Expiry
                       </p>
-
                       <p className="text-xs font-bold text-slate-700 mt-1">
-                        {med.expiry_date || 'Not specified'}
+                        {medicine.expiry_date || 'Not specified'}
                       </p>
-
                     </div>
-
                   </div>
 
-
                   <p className="text-[10px] text-slate-400">
-                    Batch: {med.batch_no || '—'}
+                    Batch: {medicine.batch_no || '—'}
                   </p>
 
                 </div>
-
               ))}
 
             </div>
@@ -3442,7 +3359,6 @@ export default function App() {
             {/* DESKTOP STOCK TABLE */}
 
             <div className="hidden lg:block bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-
               <div className="overflow-x-auto">
 
                 <table className="w-full text-left text-sm">
@@ -3460,46 +3376,42 @@ export default function App() {
 
                   <tbody className="divide-y divide-slate-100">
 
-                    {filteredStock.map(med => (
-
-                      <tr key={med.id}>
+                    {filteredStock.map(medicine => (
+                      <tr key={medicine.id}>
 
                         <td className="p-4 font-bold">
-                          {med.name}
+                          {medicine.name}
                         </td>
 
                         <td className="p-4 text-xs">
-                          {med.category || 'General'}
+                          {medicine.category || 'General'}
                         </td>
 
                         <td className="p-4 text-xs font-mono">
-                          {med.batch_no || '—'}
+                          {medicine.batch_no || '—'}
                         </td>
 
                         <td className="p-4 text-xs">
-                          {med.expiry_date || '—'}
+                          {medicine.expiry_date || '—'}
                         </td>
 
                         <td className="p-4 font-bold text-emerald-700">
-                          {money(med.selling_price)}
+                          {money(medicine.selling_price)}
                         </td>
 
                         <td className="p-4 text-right">
-
                           <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                            isMedicineExpired(med)
+                            isMedicineExpired(medicine)
                               ? 'bg-rose-50 text-rose-700'
-                              : Number(med.stock || 0) <= 5
+                              : Number(medicine.stock || 0) <= 5
                                 ? 'bg-amber-50 text-amber-700'
                                 : 'bg-emerald-50 text-emerald-700'
                           }`}>
-                            {med.stock || 0} units
+                            {medicine.stock || 0} units
                           </span>
-
                         </td>
 
                       </tr>
-
                     ))}
 
                   </tbody>
@@ -3507,16 +3419,12 @@ export default function App() {
                 </table>
 
               </div>
-
             </div>
 
-
             {filteredStock.length === 0 && (
-
               <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-xs text-slate-400">
                 No matching medicines found.
               </div>
-
             )}
 
           </div>
@@ -3532,9 +3440,7 @@ export default function App() {
 
           <div className="space-y-5">
 
-
             <div>
-
               <h2 className="text-xl sm:text-2xl font-black text-slate-900">
                 Medicine Returns
               </h2>
@@ -3542,9 +3448,7 @@ export default function App() {
               <p className="text-xs text-slate-500 mt-1">
                 Record returned medicines and update eligible stock.
               </p>
-
             </div>
-
 
             <Message
               error={returnError}
@@ -3596,25 +3500,19 @@ export default function App() {
             <section className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl shadow-sm overflow-hidden">
 
               <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center gap-3">
-
                 <div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
                   <RotateCcw size={20} />
                 </div>
 
                 <div>
-
                   <h3 className="font-black text-slate-900">
                     Record New Return
                   </h3>
-
                   <p className="text-[10px] text-slate-400 mt-1">
                     Enter the item and return details.
                   </p>
-
                 </div>
-
               </div>
-
 
               <form
                 onSubmit={handleReturnSubmit}
@@ -3622,39 +3520,38 @@ export default function App() {
               >
 
                 <div className="space-y-2">
-
                   <label className="text-xs font-bold text-slate-600">
                     Select Medicine
                   </label>
 
                   <select
                     value={selectedReturnMedicineId}
-                    onChange={e => setSelectedReturnMedicineId(e.target.value)}
+                    onChange={event =>
+                      setSelectedReturnMedicineId(event.target.value)
+                    }
                     required
                     className={inputClass}
                     disabled={returnLoading}
                   >
+                    <option value="">Choose medicine...</option>
 
-                    <option value="">
-                      Choose medicine...
-                    </option>
-
-                    {medicines.map(med => (
-
-                      <option key={med.id} value={med.id}>
-                        {med.name}
-                        {med.batch_no ? ` | ${med.batch_no}` : ''}
+                    {medicines.map(medicine => (
+                      <option
+                        key={medicine.id}
+                        value={medicine.id}
+                      >
+                        {medicine.name}
+                        {medicine.batch_no
+                          ? ` | ${medicine.batch_no}`
+                          : ''}
                       </option>
-
                     ))}
 
                   </select>
-
                 </div>
 
 
                 {selectedReturnMedicine && (
-
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
 
                     <div>
@@ -3694,23 +3591,19 @@ export default function App() {
                     </div>
 
                   </div>
-
                 )}
 
 
                 {returnExpired && (
-
                   <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs font-semibold">
                     This medicine has expired. It can be recorded as returned, but it will not be added to saleable stock.
                   </div>
-
                 )}
 
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                   <div className="space-y-2">
-
                     <label className="text-xs font-bold text-slate-600">
                       Returned Quantity
                     </label>
@@ -3721,44 +3614,36 @@ export default function App() {
                       step="1"
                       required
                       value={returnQuantity}
-                      onChange={e => setReturnQuantity(e.target.value)}
+                      onChange={event => setReturnQuantity(event.target.value)}
                       className={inputClass}
                       disabled={returnLoading}
                     />
-
                   </div>
 
-
                   <div className="space-y-2">
-
                     <label className="text-xs font-bold text-slate-600">
                       Item Condition
                     </label>
 
                     <select
                       value={returnCondition}
-                      onChange={e => setReturnCondition(e.target.value)}
+                      onChange={event => setReturnCondition(event.target.value)}
                       className={inputClass}
                       disabled={returnLoading}
                     >
-
                       <option value="resellable">
                         Good / Resellable
                       </option>
-
                       <option value="not_resellable">
                         Damaged / Not Resellable
                       </option>
-
                     </select>
-
                   </div>
 
                 </div>
 
 
                 <div className="space-y-2">
-
                   <label className="text-xs font-bold text-slate-600">
                     Reason for Return
                   </label>
@@ -3768,17 +3653,15 @@ export default function App() {
                     required
                     maxLength={250}
                     value={returnReason}
-                    onChange={e => setReturnReason(e.target.value)}
+                    onChange={event => setReturnReason(event.target.value)}
                     placeholder="Enter return reason..."
                     className={`${inputClass} resize-y`}
                     disabled={returnLoading}
                   />
-
                 </div>
 
 
                 {selectedReturnMedicine && (
-
                   <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 space-y-2">
 
                     <div className="flex justify-between text-xs">
@@ -3796,27 +3679,21 @@ export default function App() {
                     </div>
 
                     <div className="flex justify-between pt-2 border-t border-emerald-200">
-
                       <span className="text-sm font-black">
                         Estimated Return Value
                       </span>
-
                       <span className="text-lg font-black text-emerald-800">
                         {money(returnTotal)}
                       </span>
-
                     </div>
 
                     <p className="text-[10px] text-emerald-800 font-semibold">
-
                       {returnWillRestoreStock
                         ? `${Number(returnQuantity)} units will be added to available inventory.`
                         : 'No units will be added to available inventory.'}
-
                     </p>
 
                   </div>
-
                 )}
 
 
@@ -3830,23 +3707,17 @@ export default function App() {
                   }
                   className="w-full sm:w-auto px-7 py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs sm:text-sm font-black disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-
                   {returnLoading ? (
-
                     <>
                       <Loader2 size={16} className="animate-spin" />
                       Recording Return...
                     </>
-
                   ) : (
-
                     <>
                       <RotateCcw size={16} />
                       Record Medicine Return
                     </>
-
                   )}
-
                 </button>
 
               </form>
@@ -3861,20 +3732,15 @@ export default function App() {
               <div className="p-4 sm:p-5 border-b border-slate-100 space-y-3">
 
                 <div>
-
                   <h3 className="font-black text-slate-900">
                     Return History
                   </h3>
-
                   <p className="text-[10px] text-slate-400 mt-1">
                     Latest 100 return transactions.
                   </p>
-
                 </div>
 
-
                 <div className="relative">
-
                   <Search
                     size={16}
                     className="absolute left-4 top-3.5 text-slate-400"
@@ -3883,10 +3749,9 @@ export default function App() {
                   <input
                     className={`${inputClass} pl-11`}
                     value={returnSearch}
-                    onChange={e => setReturnSearch(e.target.value)}
+                    onChange={event => setReturnSearch(event.target.value)}
                     placeholder="Search medicine or reason..."
                   />
-
                 </div>
 
               </div>
@@ -3897,11 +3762,9 @@ export default function App() {
               <div className="md:hidden divide-y divide-slate-100">
 
                 {filteredReturns.map(item => (
-
                   <div key={item.id} className="p-4 space-y-2">
 
                     <div className="flex justify-between items-start gap-2">
-
                       <p className="font-black text-sm text-slate-900">
                         {item.medicine_name}
                       </p>
@@ -3915,17 +3778,12 @@ export default function App() {
                           ? 'Stock Added'
                           : 'Not Restocked'}
                       </span>
-
                     </div>
 
-
                     <div className="grid grid-cols-2 gap-2 text-xs">
-
                       <div>
                         <p className="text-slate-400">Quantity</p>
-                        <p className="font-bold">
-                          {item.quantity}
-                        </p>
+                        <p className="font-bold">{item.quantity}</p>
                       </div>
 
                       <div>
@@ -3934,7 +3792,6 @@ export default function App() {
                           {money(item.total_amount)}
                         </p>
                       </div>
-
                     </div>
 
                     <p className="text-[10px] text-slate-500">
@@ -3946,7 +3803,6 @@ export default function App() {
                     </p>
 
                   </div>
-
                 ))}
 
               </div>
@@ -3973,7 +3829,6 @@ export default function App() {
                   <tbody className="divide-y divide-slate-100">
 
                     {filteredReturns.map(item => (
-
                       <tr key={item.id}>
 
                         <td className="p-4 font-bold">
@@ -4007,7 +3862,6 @@ export default function App() {
                         </td>
 
                       </tr>
-
                     ))}
 
                   </tbody>
@@ -4016,13 +3870,10 @@ export default function App() {
 
               </div>
 
-
               {filteredReturns.length === 0 && (
-
                 <div className="p-10 text-center text-xs text-slate-400">
                   No return records found.
                 </div>
-
               )}
 
             </section>
@@ -4040,20 +3891,20 @@ export default function App() {
 
       {selectedBill && (
 
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[70] flex items-center justify-center p-3 sm:p-5 no-print">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[70] flex items-center justify-center p-3 sm:p-5">
 
           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-lg w-full max-h-[92vh] overflow-y-auto relative">
 
             <button
               type="button"
               onClick={() => setSelectedBill(null)}
-              className="absolute right-4 top-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-xl z-10 no-print"
+              className="absolute right-4 top-4 p-2 bg-slate-100 hover:bg-slate-200 rounded-xl z-10"
+              aria-label="Close receipt"
             >
               <X size={17} />
             </button>
 
-
-            <div className="print-area p-5 sm:p-7 space-y-5">
+            <div className="p-5 sm:p-7 space-y-5">
 
               <div className="text-center border-b border-slate-200 pb-4">
 
@@ -4062,11 +3913,11 @@ export default function App() {
                 </div>
 
                 <h2 className="text-xl font-black text-slate-900 mt-3">
-                  Dr. Gondhane Clinic
+                  Dr. Gondhane Skin Care Clinic
                 </h2>
 
                 <p className="text-xs text-slate-500">
-                  Patient Receipt
+                  Official Patient Receipt
                 </p>
 
                 <p className="text-[10px] text-slate-400 mt-2">
@@ -4083,11 +3934,15 @@ export default function App() {
                 </p>
 
                 <p>
-                  <strong>Phone:</strong> {selectedBill.patient_phone}
+                  <strong>Phone:</strong> {selectedBill.patient_phone || 'N/A'}
                 </p>
 
                 <p>
-                  <strong>Locality:</strong> {selectedBill.locality}
+                  <strong>Locality:</strong> {selectedBill.locality || 'Clinic'}
+                </p>
+
+                <p>
+                  <strong>Payment Mode:</strong> {selectedBill.payment_mode || 'Cash'}
                 </p>
 
                 <p className="break-all">
@@ -4103,44 +3958,32 @@ export default function App() {
                   Billed Medicines
                 </h4>
 
-
-                {selectedBill.bill_items?.length ? (
-
-                  selectedBill.bill_items.map((item, index) => (
-
+                {getBillItems(selectedBill).length > 0 ? (
+                  getBillItems(selectedBill).map((item, index) => (
                     <div
-                      key={item.id || index}
+                      key={`${item.name}-${index}`}
                       className="flex justify-between gap-3 border-b border-slate-100 pb-3 text-xs"
                     >
 
                       <div>
-
                         <p className="font-bold text-slate-900">
-                          {item.medicines?.name || 'Medicine'}
+                          {item.name}
                         </p>
-
                         <p className="text-slate-500 mt-1">
-                          {item.quantity} × {money(item.price)}
+                          {item.qty} × {money(item.price)}
                         </p>
-
                       </div>
 
                       <p className="font-black">
-                        {money(
-                          Number(item.quantity) * Number(item.price)
-                        )}
+                        {money(item.qty * item.price)}
                       </p>
 
                     </div>
-
                   ))
-
                 ) : (
-
                   <p className="text-xs text-slate-400">
                     No bill item details available.
                   </p>
-
                 )}
 
               </div>
@@ -4161,18 +4004,29 @@ export default function App() {
 
               <div className="text-center text-[10px] text-slate-400">
                 Thank you. Get well soon.
+                <br />
+                Software by MithTechX
               </div>
 
 
-              <div className="grid grid-cols-2 gap-2 no-print">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
 
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={() => printReceipt(selectedBill)}
                   className="py-3 bg-slate-900 text-white rounded-xl font-bold text-xs flex justify-center items-center gap-2"
                 >
                   <Printer size={15} />
-                  Print Receipt
+                  Print
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => sendBillWhatsApp(selectedBill)}
+                  className="py-3 bg-emerald-700 text-white rounded-xl font-bold text-xs flex justify-center items-center gap-2"
+                >
+                  <Send size={15} />
+                  WhatsApp
                 </button>
 
                 <button
