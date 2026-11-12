@@ -2227,17 +2227,17 @@ export default function App() {
                   </div>
 
 
-                  {loading ? (
+                  {dataLoading ? (
                     <div className="bg-white rounded-2xl p-10 text-center">
                       <Loader2 size={25} className="animate-spin mx-auto text-emerald-700" />
                       <p className="text-xs text-slate-400 mt-3">
                         Loading medicines...
                       </p>
                     </div>
-                  ) : loadError ? (
+                  ) : dataError ? (
                     <Message
-                      error={loadError}
-                      onClose={() => setLoadError('')}
+                      error={dataError}
+                      onClose={() => setDataError('')}
                     />
                   ) : (
 
@@ -2334,7 +2334,7 @@ export default function App() {
 
                   )}
 
-                  {!loading && !loadError && filteredMedicines.length === 0 && (
+                  {!dataLoading && !dataError && filteredMedicines.length === 0 && (
                     <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center">
                       <Package size={28} className="mx-auto text-slate-300" />
                       <p className="text-sm font-bold text-slate-600 mt-3">
