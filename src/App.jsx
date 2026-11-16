@@ -2250,12 +2250,14 @@ export default function App() {
 
                         const expired = isMedicineExpired(medicine);
                         const stock = Number(medicine.stock || 0);
+                        const selectedQty = Number(inCart?.qty || 0);
                         const unavailable = stock <= 0 || expired;
+                        const atStockLimit = selectedQty >= stock;
 
                         return (
                           <div
                             key={medicine.id}
-                            className={`min-w-0 min-h-[142px] sm:min-h-[158px] rounded-xl sm:rounded-2xl border p-2 sm:p-3 flex flex-col transition ${
+                            className={`min-w-0 min-h-[138px] sm:min-h-[154px] rounded-xl sm:rounded-2xl border p-2 sm:p-3 flex flex-col justify-between gap-2 sm:gap-3 transition ${
                               inCart
                                 ? 'border-emerald-500 bg-emerald-50/40 shadow-sm'
                                 : 'border-slate-200 bg-white hover:border-emerald-400'
@@ -2266,87 +2268,67 @@ export default function App() {
                               disabled={unavailable}
                               onClick={() => addToCart(medicine)}
                               aria-label={`Add ${medicine.name} to bill`}
-                              className="w-full min-w-0 flex-1 text-left flex flex-col justify-between disabled:cursor-not-allowed"
+                              className="w-full min-w-0 flex-1 text-left flex flex-col justify-start disabled:cursor-not-allowed"
                             >
-                              <div className="space-y-1.5 min-w-0">
-                                <div className="flex items-start justify-between gap-1">
-                                  <span className="min-w-0 max-w-full text-[7px] sm:text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-1.5 py-1 rounded-md truncate">
-                                    {medicine.category || 'General'}
-                                  </span>
+                              <span className="text-[7px] sm:text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100/70 px-1.5 sm:px-2 py-0.5 rounded-md inline-block max-w-full truncate self-start">
+                                {medicine.category || 'General'}
+                              </span>
 
-                                  {inCart && (
-                                    <span className="shrink-0 min-w-5 h-5 px-1 bg-emerald-700 text-white rounded-full text-[9px] font-black flex items-center justify-center">
-                                      {inCart.qty}
-                                    </span>
-                                  )}
-                                </div>
+                              <h4 className="font-extrabold text-slate-900 text-[11px] sm:text-[15px] leading-tight line-clamp-2 min-h-[2.25rem] sm:min-h-10 break-words mt-1.5">
+                                {medicine.name}
+                              </h4>
 
-                                <h4 className="font-bold text-slate-900 text-[10px] sm:text-xs leading-tight break-words line-clamp-2 min-h-[2rem]">
-                                  {medicine.name}
-                                </h4>
-
-                                <p className="text-[8px] sm:text-[9px] text-slate-400 truncate">
-                                  Batch: {medicine.batch_no || '—'}
-                                </p>
-                              </div>
-
-                              <div className="pt-2 mt-2 border-t border-slate-100 space-y-1.5">
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
-                                  <span className="text-[10px] sm:text-xs font-black text-emerald-700 truncate">
-                                    {money(medicine.selling_price || medicine.price)}
-                                  </span>
-
-                                  <span className={`w-fit max-w-full text-[7px] sm:text-[9px] font-bold px-1.5 py-1 rounded-md truncate ${
-                                    expired
-                                      ? 'bg-rose-50 text-rose-700'
-                                      : stock <= 5
-                                        ? 'bg-amber-50 text-amber-700'
-                                        : 'bg-emerald-50 text-emerald-700'
-                                  }`}>
-                                    {expired ? 'EXPIRED' : `Stock: ${stock}`}
-                                  </span>
-                                </div>
-
-                                <p className="text-center text-[8px] sm:text-[10px] font-bold text-emerald-700 leading-tight">
-                                  {expired
-                                    ? 'Expired'
-                                    : stock <= 0
-                                      ? 'Out of stock'
-                                      : inCart
-                                        ? 'Tap to add more'
-                                        : '+ Add'}
-                                </p>
-                              </div>
+                              <p className="text-[8px] sm:text-[9px] text-slate-400 truncate mt-1">
+                                Batch: {medicine.batch_no || '—'}
+                              </p>
                             </button>
 
-                            {inCart && (
-                              <div className="mt-2 pt-2 border-t border-emerald-100 flex items-center justify-center gap-2">
-                                <button
-                                  type="button"
-                                  aria-label={`Decrease ${medicine.name} quantity`}
-                                  title="Decrease quantity"
-                                  onClick={() => updateQty(medicine.id, inCart.qty - 1)}
-                                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700 font-black text-base leading-none flex items-center justify-center"
-                                >
-                                  −
-                                </button>
+                            <div className="flex flex-col items-start gap-1.5 pt-2 border-t border-slate-100 w-full min-w-0">
+                              <span className="text-[10px] sm:text-sm font-black text-emerald-700 leading-tight">
+                                {money(medicine.selling_price || medicine.price)}
+                              </span>
 
-                                <span className="min-w-5 text-center text-[10px] sm:text-xs font-black text-slate-800 tabular-nums">
-                                  {inCart.qty}
+                              <div className="flex flex-col items-start gap-1.5 w-full min-w-0">
+                                {inCart && (
+                                  <div className="inline-flex items-center gap-0.5 bg-emerald-50 border border-emerald-100 rounded-lg p-0.5 max-w-full">
+                                    <button
+                                      type="button"
+                                      aria-label={`Decrease ${medicine.name} quantity`}
+                                      title="Decrease quantity; removes item at 1"
+                                      onClick={() => updateQty(medicine.id, selectedQty - 1)}
+                                      className="w-5 h-5 sm:w-7 sm:h-7 shrink-0 flex items-center justify-center rounded-md sm:rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition text-xs sm:text-base font-black leading-none"
+                                    >
+                                      −
+                                    </button>
+
+                                    <span className="min-w-4 sm:min-w-5 text-center text-[10px] sm:text-xs font-black text-emerald-800 tabular-nums">
+                                      {selectedQty}
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      aria-label={`Increase ${medicine.name} quantity`}
+                                      title={atStockLimit ? 'Maximum available stock selected' : 'Add one more'}
+                                      disabled={atStockLimit || unavailable}
+                                      onClick={() => addToCart(medicine)}
+                                      className="w-5 h-5 sm:w-7 sm:h-7 shrink-0 flex items-center justify-center rounded-md sm:rounded-lg bg-white border border-slate-200 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition text-xs sm:text-base font-black leading-none"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                )}
+
+                                <span className={`inline-flex max-w-full text-[7px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-1 rounded-md sm:rounded-lg whitespace-nowrap ${
+                                  expired
+                                    ? 'bg-rose-50 text-rose-700'
+                                    : stock > 5
+                                      ? 'bg-emerald-50 text-emerald-700'
+                                      : 'bg-amber-50 text-amber-700'
+                                }`}>
+                                  {expired ? 'EXPIRED' : `Stock: ${stock}`}
                                 </span>
-
-                                <button
-                                  type="button"
-                                  aria-label={`Increase ${medicine.name} quantity`}
-                                  title="Increase quantity"
-                                  disabled={inCart.qty >= stock}
-                                  onClick={() => addToCart(medicine)}
-                                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed font-black text-base leading-none flex items-center justify-center"
-                                >
-                                  +
-                                </button>
                               </div>
-                            )}
+                            </div>
                           </div>
                         );
                       })}
