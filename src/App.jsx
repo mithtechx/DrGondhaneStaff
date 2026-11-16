@@ -2241,7 +2241,7 @@ export default function App() {
                     />
                   ) : (
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-3 sm:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
 
                       {filteredMedicines.map(medicine => {
                         const inCart = cart.find(
@@ -2250,83 +2250,104 @@ export default function App() {
 
                         const expired = isMedicineExpired(medicine);
                         const stock = Number(medicine.stock || 0);
+                        const unavailable = stock <= 0 || expired;
 
                         return (
-                          <button
-                            type="button"
+                          <div
                             key={medicine.id}
-                            disabled={stock <= 0 || expired}
-                            onClick={() => addToCart(medicine)}
-                            className={`bg-white p-3 sm:p-4 rounded-2xl sm:rounded-3xl border transition text-left flex flex-col justify-between min-w-0 min-h-36 sm:min-h-40 ${
+                            className={`min-w-0 min-h-[142px] sm:min-h-[158px] rounded-xl sm:rounded-2xl border p-2 sm:p-3 flex flex-col transition ${
                               inCart
-                                ? 'border-emerald-500 bg-emerald-50/30 shadow-sm'
-                                : 'border-slate-200 hover:border-emerald-400'
-                            } ${
-                              stock <= 0 || expired
-                                ? 'opacity-50 cursor-not-allowed'
-                                : 'cursor-pointer'
-                            }`}
+                                ? 'border-emerald-500 bg-emerald-50/40 shadow-sm'
+                                : 'border-slate-200 bg-white hover:border-emerald-400'
+                            } ${unavailable ? 'opacity-60' : ''}`}
                           >
-
-                            <div className="space-y-2 min-w-0">
-
-                              <div className="flex justify-between items-start gap-1">
-
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md max-w-[75%] truncate">
-                                  {medicine.category || 'General'}
-                                </span>
-
-                                {inCart && (
-                                  <span className="w-5 h-5 shrink-0 bg-emerald-700 text-white rounded-full text-[10px] font-bold flex items-center justify-center">
-                                    {inCart.qty}
+                            <button
+                              type="button"
+                              disabled={unavailable}
+                              onClick={() => addToCart(medicine)}
+                              aria-label={`Add ${medicine.name} to bill`}
+                              className="w-full min-w-0 flex-1 text-left flex flex-col justify-between disabled:cursor-not-allowed"
+                            >
+                              <div className="space-y-1.5 min-w-0">
+                                <div className="flex items-start justify-between gap-1">
+                                  <span className="min-w-0 max-w-full text-[7px] sm:text-[9px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-50 px-1.5 py-1 rounded-md truncate">
+                                    {medicine.category || 'General'}
                                   </span>
-                                )}
 
+                                  {inCart && (
+                                    <span className="shrink-0 min-w-5 h-5 px-1 bg-emerald-700 text-white rounded-full text-[9px] font-black flex items-center justify-center">
+                                      {inCart.qty}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h4 className="font-bold text-slate-900 text-[10px] sm:text-xs leading-tight break-words line-clamp-2 min-h-[2rem]">
+                                  {medicine.name}
+                                </h4>
+
+                                <p className="text-[8px] sm:text-[9px] text-slate-400 truncate">
+                                  Batch: {medicine.batch_no || '—'}
+                                </p>
                               </div>
 
-                              <h4 className="font-bold text-slate-900 text-xs sm:text-sm break-words line-clamp-2">
-                                {medicine.name}
-                              </h4>
+                              <div className="pt-2 mt-2 border-t border-slate-100 space-y-1.5">
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
+                                  <span className="text-[10px] sm:text-xs font-black text-emerald-700 truncate">
+                                    {money(medicine.selling_price || medicine.price)}
+                                  </span>
 
-                              <p className="text-[9px] text-slate-400">
-                                Batch: {medicine.batch_no || '—'}
-                              </p>
+                                  <span className={`w-fit max-w-full text-[7px] sm:text-[9px] font-bold px-1.5 py-1 rounded-md truncate ${
+                                    expired
+                                      ? 'bg-rose-50 text-rose-700'
+                                      : stock <= 5
+                                        ? 'bg-amber-50 text-amber-700'
+                                        : 'bg-emerald-50 text-emerald-700'
+                                  }`}>
+                                    {expired ? 'EXPIRED' : `Stock: ${stock}`}
+                                  </span>
+                                </div>
 
-                            </div>
-
-                            <div className="pt-3 mt-3 border-t border-slate-100 space-y-2">
-
-                              <div className="flex justify-between items-center gap-1">
-
-                                <span className="text-xs font-black text-emerald-700">
-                                  {money(medicine.selling_price || medicine.price)}
-                                </span>
-
-                                <span className={`text-[9px] font-bold px-2 py-1 rounded-lg ${
-                                  expired
-                                    ? 'bg-rose-50 text-rose-700'
-                                    : stock <= 5
-                                      ? 'bg-amber-50 text-amber-700'
-                                      : 'bg-emerald-50 text-emerald-700'
-                                }`}>
-                                  {expired ? 'EXPIRED' : `Stock: ${stock}`}
-                                </span>
-
+                                <p className="text-center text-[8px] sm:text-[10px] font-bold text-emerald-700 leading-tight">
+                                  {expired
+                                    ? 'Expired'
+                                    : stock <= 0
+                                      ? 'Out of stock'
+                                      : inCart
+                                        ? 'Tap to add more'
+                                        : '+ Add'}
+                                </p>
                               </div>
+                            </button>
 
-                              <p className="text-center text-[10px] font-bold text-emerald-700">
-                                {expired
-                                  ? 'Not available'
-                                  : stock <= 0
-                                    ? 'Out of stock'
-                                    : inCart
-                                      ? 'Add another'
-                                      : '+ Add to bill'}
-                              </p>
+                            {inCart && (
+                              <div className="mt-2 pt-2 border-t border-emerald-100 flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  aria-label={`Decrease ${medicine.name} quantity`}
+                                  title="Decrease quantity"
+                                  onClick={() => updateQty(medicine.id, inCart.qty - 1)}
+                                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700 font-black text-base leading-none flex items-center justify-center"
+                                >
+                                  −
+                                </button>
 
-                            </div>
+                                <span className="min-w-5 text-center text-[10px] sm:text-xs font-black text-slate-800 tabular-nums">
+                                  {inCart.qty}
+                                </span>
 
-                          </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Increase ${medicine.name} quantity`}
+                                  title="Increase quantity"
+                                  disabled={inCart.qty >= stock}
+                                  onClick={() => addToCart(medicine)}
+                                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed font-black text-base leading-none flex items-center justify-center"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
 
